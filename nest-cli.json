@@ -1,0 +1,10 @@
+{
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "src/backend",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "assets": [],
+    "watchAssets": false,
+    "tsConfigPath": "tsconfig.backend.json"
+  }
+}
