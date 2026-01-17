@@ -54,7 +54,7 @@ export class StorageServiceSimple {
     return {
       model: 'gpt-4o-mini',
       hotkey: 'Ctrl+Shift+Space',
-      opacity: 0.6,
+      opacity: 0.85,
       alwaysOnTop: true,
       conversationHistory: []
     };

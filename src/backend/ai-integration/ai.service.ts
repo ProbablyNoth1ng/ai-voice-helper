@@ -53,7 +53,6 @@ export class AIService {
 
   async getCompletion(prompt: string): Promise<string> {
     try {
-      console.log(process.env.SYSTEM_PROMPT)
       const completion = await this.client.chat.completions.create({
         model: this.model,
         messages: [

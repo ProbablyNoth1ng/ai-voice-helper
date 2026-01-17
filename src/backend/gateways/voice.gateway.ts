@@ -27,7 +27,7 @@ interface MessageBodyPayload {
 @WebSocketGateway(3001, { 
   cors: { origin: '*' },
   transports: ['websocket', 'polling'],
-  maxHttpBufferSize: 10e6 
+  maxHttpBufferSize: 15e6 
 })
 export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
@@ -49,7 +49,7 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.debug('Hotkey pressed (backend)');
       this.server.emit('hotkey-pressed');
     });
-
+ 
     client.emit('state-change', { state: 'idle' });
   }
 
