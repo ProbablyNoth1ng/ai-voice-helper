@@ -1,6 +1,9 @@
 const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, session } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
+const dotenv = require('dotenv');
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
+
 
 let mainWindow;
 let tray;
@@ -9,16 +12,21 @@ let backendProcess;
 const isDev = process.env.NODE_ENV === 'development' || 
               process.argv.includes('--dev');
 
+              
 function createWindow() {
+  const width = parseInt(process.env.WIDTH, 10) || 800;
+  const height = parseInt(process.env.HEIGHT, 10) || 600;
+
   mainWindow = new BrowserWindow({
-    width: 600,
-    height: 400,
+    width: width,
+    height: height,
     transparent: false,
     frame: false,
     alwaysOnTop: true,
     skipTaskbar: false,
     resizable: true,
     backgroundColor: '#1a1a2e',
+    opacity: 0.8,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
