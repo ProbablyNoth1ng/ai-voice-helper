@@ -2,20 +2,22 @@ const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, session } = req
 const path = require('path');
 const { spawn } = require('child_process');
 const dotenv = require('dotenv');
-dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
+// Load .env
+const envPath = path.join(__dirname, '..', '.env');
+dotenv.config({ path: envPath });
 
 let mainWindow;
 let tray;
 let backendProcess;
 
-const isDev = process.env.NODE_ENV === 'development' || 
-              process.argv.includes('--dev');
+const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
 
-              
 function createWindow() {
   const width = parseInt(process.env.WIDTH, 10) || 800;
   const height = parseInt(process.env.HEIGHT, 10) || 600;
+
+  console.log('📐 Creating window:', width, 'x', height);
 
   mainWindow = new BrowserWindow({
     width: width,
@@ -26,7 +28,6 @@ function createWindow() {
     skipTaskbar: false,
     resizable: true,
     backgroundColor: '#1a1a2e',
-    opacity: 0.8,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -35,25 +36,15 @@ function createWindow() {
     }
   });
 
+  // Handle permissions
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     const allowedPermissions = ['media', 'microphone', 'audioCapture'];
-    
     if (allowedPermissions.includes(permission)) {
       console.log(`✅ Allowing permission: ${permission}`);
       callback(true);
     } else {
-      console.log(`❌ Denying permission: ${permission}`);
       callback(false);
     }
-  });
-
-  session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
-    const allowedPermissions = ['media', 'microphone', 'audioCapture'];
-    
-    if (allowedPermissions.includes(permission)) {
-      return true;
-    }
-    return false;
   });
 
   if (isDev) {
@@ -67,10 +58,6 @@ function createWindow() {
   }
 
   mainWindow.setContentProtection(true);
-
-  if (process.platform === 'darwin') {
-    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  }
 
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
     console.error('❌ Failed to load:', errorDescription);
@@ -115,18 +102,21 @@ function toggleWindow() {
 }
 
 function registerHotkeys() {
+  // Main hotkey: Toggle recording
   globalShortcut.register('CommandOrControl+Shift+Space', () => {
-    console.log('🔥 Hotkey: Ctrl+Shift+Space');
+    console.log('🔥 Hotkey: Ctrl+Shift+Space (toggle recording)');
     mainWindow.webContents.send('hotkey-pressed');
   });
 
+  // Toggle visibility
   globalShortcut.register('CommandOrControl+Shift+H', () => {
-    console.log('👁️ Hotkey: Toggle visibility');
+    console.log('👁️ Hotkey: Ctrl+Shift+H (toggle visibility)');
     toggleWindow();
   });
 
+  // Toggle settings
   globalShortcut.register('CommandOrControl+Shift+S', () => {
-    console.log('⚙️ Hotkey: Settings');
+    console.log('⚙️ Hotkey: Ctrl+Shift+S (toggle settings)');
     mainWindow.webContents.send('toggle-settings');
   });
 
@@ -174,7 +164,7 @@ app.whenReady().then(() => {
   startBackend();
 
   const delay = isDev ? 0 : 3000;
-  
+
   setTimeout(() => {
     createWindow();
     createTray();
@@ -201,6 +191,7 @@ app.on('window-all-closed', () => {
   }
 });
 
+// IPC handlers
 ipcMain.on('hide-window', () => mainWindow.hide());
 ipcMain.on('show-window', () => mainWindow.show());
 ipcMain.on('set-always-on-top', (_, value) => mainWindow.setAlwaysOnTop(value));

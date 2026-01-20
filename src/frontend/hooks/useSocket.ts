@@ -21,6 +21,8 @@ declare const window: WindowWithElectron;
 const BACKEND_URL = 'http://localhost:3001';
 const isElectron = !!window.electronAPI;
 
+let electronListenersRegistered = false;
+
 export const useSocket = () => {
   const socketRef = useRef<Socket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -31,75 +33,75 @@ export const useSocket = () => {
   } | null>(null);
 
   const { setState, addMessage, setError, setShowSettings } = useVoiceStore();
- 
+
   const startRecording = useCallback((): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       console.log('🎤 Starting audio recording...');
- 
+
       recordingPromiseRef.current = { resolve, reject };
 
-      navigator.mediaDevices.getUserMedia({ 
+      navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
           sampleRate: 16000
-        } 
+        }
       })
-      .then((stream) => {
-        console.log('✅ Microphone access granted');
+        .then((stream) => {
+          console.log('✅ Microphone access granted');
 
-        audioChunksRef.current = [];
-        
-        const mediaRecorder = new MediaRecorder(stream, {
-          mimeType: 'audio/webm;codecs=opus'
+          audioChunksRef.current = [];
+
+          const mediaRecorder = new MediaRecorder(stream, {
+            mimeType: 'audio/webm;codecs=opus'
+          });
+
+          mediaRecorderRef.current = mediaRecorder;
+
+          mediaRecorder.ondataavailable = (event: BlobEvent) => {
+            if (event.data.size > 0) {
+              audioChunksRef.current.push(event.data);
+            }
+          };
+
+          mediaRecorder.onstop = () => {
+            console.log('⏹️ Recording stopped');
+            stream.getTracks().forEach(track => track.stop());
+
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            console.log('📦 Audio blob size:', audioBlob.size);
+
+            if (recordingPromiseRef.current) {
+              recordingPromiseRef.current.resolve(audioBlob);
+              recordingPromiseRef.current = null;
+            }
+          };
+
+          mediaRecorder.onerror = () => {
+            console.error('❌ MediaRecorder error');
+            if (recordingPromiseRef.current) {
+              recordingPromiseRef.current.reject(new Error('Recording failed'));
+              recordingPromiseRef.current = null;
+            }
+          };
+
+          mediaRecorder.start(50);
+          console.log('🔴 Recording started... Press hotkey again to stop.');
+        })
+        .catch((err: Error) => {
+          console.error('❌ Failed to start recording:', err);
+          reject(new Error(`Microphone error: ${err.message}`));
         });
-        
-        mediaRecorderRef.current = mediaRecorder;
-
-        mediaRecorder.ondataavailable = (event: BlobEvent) => {
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
-        };
-
-        mediaRecorder.onstop = () => {
-          console.log('⏹️ Recording stopped');
-          stream.getTracks().forEach(track => track.stop());
-          
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          console.log('📦 Audio blob size:', audioBlob.size);
-           
-          if (recordingPromiseRef.current) {
-            recordingPromiseRef.current.resolve(audioBlob);
-            recordingPromiseRef.current = null;
-          }
-        };
-
-        mediaRecorder.onerror = () => {
-          console.error('❌ MediaRecorder error');
-          if (recordingPromiseRef.current) {
-            recordingPromiseRef.current.reject(new Error('Recording failed'));
-            recordingPromiseRef.current = null;
-          }
-        };
-
-        mediaRecorder.start(50); 
-        console.log('🔴 Recording started... Press hotkey again to stop.');
-      })
-      .catch((err: Error) => {
-        console.error('❌ Failed to start recording:', err);
-        reject(new Error(`Microphone error: ${err.message}`));
-      });
     });
   }, []);
- 
+
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       console.log('⏹️ Stopping recording...');
       mediaRecorderRef.current.stop();
     }
   }, []);
- 
+
   const sendAudioToBackend = useCallback((audioBlob: Blob) => {
     const socket = socketRef.current;
     if (!socket?.connected) {
@@ -131,7 +133,7 @@ export const useSocket = () => {
     };
     reader.readAsDataURL(audioBlob);
   }, [setState, setError]);
- 
+
   const handleHotkeyPress = useCallback(async () => {
     const currentState = useVoiceStore.getState().state;
     const socket = socketRef.current;
@@ -142,31 +144,33 @@ export const useSocket = () => {
       setError('Not connected to backend');
       return;
     }
- 
+
     if (currentState === 'idle') {
       setState('listening');
       setError(null);
 
-      try { 
+      try {
         const audioBlob = await startRecording();
-         
         sendAudioToBackend(audioBlob);
-
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Recording failed';
         console.error('❌ Recording failed:', errorMessage);
         setError(errorMessage);
         setState('idle');
       }
-    } 
-    else if (currentState === 'listening') {
+    } else if (currentState === 'listening') {
       console.log('⏹️ Stopping recording...');
-      stopRecording(); 
-    } 
-    else if (currentState === 'processing') {
+      stopRecording();
+    } else if (currentState === 'processing') {
       console.log('⏳ Already processing, please wait...');
     }
   }, [setState, setError, startRecording, stopRecording, sendAudioToBackend]);
+
+  const handleToggleSettings = useCallback(() => {
+    const currentShowSettings = useVoiceStore.getState().showSettings;
+    console.log('⚙️ Toggling settings:', !currentShowSettings);
+    setShowSettings(!currentShowSettings);
+  }, [setShowSettings]);
 
   useEffect(() => {
     console.log('🔌 Connecting to', BACKEND_URL);
@@ -220,24 +224,24 @@ export const useSocket = () => {
       setError(message);
       setState('idle');
     });
-  
+ 
     if (!isElectron) {
       socket.on('hotkey-pressed', handleHotkeyPress);
     }
  
-    if (isElectron && window.electronAPI) {
-      console.log('⚡ Using Electron hotkeys');
+    if (isElectron && window.electronAPI && !electronListenersRegistered) {
+      console.log('⚡ Setting up Electron hotkeys (first time only)');
+      electronListenersRegistered = true;
+      
       window.electronAPI.onHotkeyPressed(handleHotkeyPress);
-      window.electronAPI.onToggleSettings(() => {
-        setShowSettings(!useVoiceStore.getState().showSettings);
-      });
+      window.electronAPI.onToggleSettings(handleToggleSettings);
     }
 
     return () => {
       socket.close();
       stopRecording();
     };
-  }, [setState, addMessage, setError, setShowSettings, handleHotkeyPress, stopRecording]);
+  }, [setState, addMessage, setError, handleHotkeyPress, handleToggleSettings, stopRecording]);
 
   return socketRef.current;
 };

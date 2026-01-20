@@ -31,19 +31,22 @@ interface VoiceStore {
   setError: (error: string | null) => void;
 }
 
-export const useVoiceStore = create<VoiceStore>((set) => ({
+export const useVoiceStore = create<VoiceStore>((set, get) => ({
   state: 'idle',
   messages: [],
   config: {
     model: 'gpt-4o-mini',
     hotkey: 'Ctrl+Shift+Space',
-    opacity: 0.6,
+    opacity: 0.9,
     alwaysOnTop: true
   },
   showSettings: false,
   error: null,
 
-  setState: (state) => set({ state }),
+  setState: (state) => {
+    console.log('📦 Store: setState ->', state);
+    set({ state });
+  },
   
   addMessage: (message) => 
     set((s) => ({ messages: [...s.messages, message] })),
@@ -53,7 +56,10 @@ export const useVoiceStore = create<VoiceStore>((set) => ({
   updateConfig: (newConfig) =>
     set((s) => ({ config: { ...s.config, ...newConfig } })),
   
-  setShowSettings: (show) => set({ showSettings: show }),
+  setShowSettings: (show) => {
+    console.log('📦 Store: setShowSettings ->', show);
+    set({ showSettings: show });
+  },
   
   setError: (error) => set({ error })
 }));
