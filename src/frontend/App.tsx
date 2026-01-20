@@ -9,9 +9,15 @@ export default function App() {
   useSocket();
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => { 
+    console.log('🔧 showSettings changed:', showSettings);
+  }, [showSettings]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+ 
       if (e.ctrlKey && e.shiftKey && e.code === 'KeyS') {
         e.preventDefault();
+        console.log('⚙️ Keyboard shortcut: Toggle settings');
         setShowSettings(!showSettings);
       }
     };
@@ -21,15 +27,21 @@ export default function App() {
   }, [showSettings, setShowSettings]);
 
   return (
-    <div className="app-container">
+    <div className="w-full h-full bg-gray-900 text-white font-sans relative">
       {error && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-[9999] pointer-events-auto">
-          <p className="text-sm font-medium">⚠️ {error}</p>
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-[100]">
+          <p className="text-sm font-medium m-0">⚠️ {error}</p>
         </div>
       )}
       
       <Overlay />
-      {showSettings && <SettingsPanel />}
+      
+      {showSettings && (
+        <>
+          {console.log('🔧 Rendering SettingsPanel')}
+          <SettingsPanel />
+        </>
+      )}
     </div>
   );
 }
