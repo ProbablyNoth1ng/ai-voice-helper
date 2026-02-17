@@ -2,8 +2,7 @@ const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, session } = req
 const path = require('path');
 const { spawn } = require('child_process');
 const dotenv = require('dotenv');
-
-// Load .env
+ 
 const envPath = path.join(__dirname, '..', '.env');
 dotenv.config({ path: envPath });
 
@@ -25,7 +24,7 @@ function createWindow() {
     transparent: false,
     frame: false,
     alwaysOnTop: true,
-    skipTaskbar: false,
+    skipTaskbar: true,
     resizable: true,
     backgroundColor: '#1a1a2e',
     webPreferences: {
@@ -35,8 +34,7 @@ function createWindow() {
       devTools: true
     }
   });
-
-  // Handle permissions
+ 
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     const allowedPermissions = ['media', 'microphone', 'audioCapture'];
     if (allowedPermissions.includes(permission)) {
@@ -102,19 +100,17 @@ function toggleWindow() {
 }
 
 function registerHotkeys() {
-  // Main hotkey: Toggle recording
-  globalShortcut.register('CommandOrControl+Shift+Space', () => {
-    console.log('🔥 Hotkey: Ctrl+Shift+Space (toggle recording)');
+ 
+  globalShortcut.register('CommandOrControl+Shift+Q', () => {
+    console.log('🔥 Hotkey: Ctrl+Shift+Q (toggle recording)');
     mainWindow.webContents.send('hotkey-pressed');
   });
-
-  // Toggle visibility
+ 
   globalShortcut.register('CommandOrControl+Shift+H', () => {
     console.log('👁️ Hotkey: Ctrl+Shift+H (toggle visibility)');
     toggleWindow();
   });
 
-  // Toggle settings
   globalShortcut.register('CommandOrControl+Shift+S', () => {
     console.log('⚙️ Hotkey: Ctrl+Shift+S (toggle settings)');
     mainWindow.webContents.send('toggle-settings');
@@ -122,6 +118,7 @@ function registerHotkeys() {
 
   console.log('✅ Hotkeys registered');
 }
+
 
 function startBackend() {
   if (isDev) {
@@ -156,7 +153,7 @@ function startBackend() {
   }
 }
 
-// App lifecycle
+ 
 app.whenReady().then(() => {
   console.log('🚀 Starting AI Voice Assistant...');
   console.log('   Mode:', isDev ? 'DEVELOPMENT' : 'PRODUCTION');
@@ -191,7 +188,7 @@ app.on('window-all-closed', () => {
   }
 });
 
-// IPC handlers
+ 
 ipcMain.on('hide-window', () => mainWindow.hide());
 ipcMain.on('show-window', () => mainWindow.show());
 ipcMain.on('set-always-on-top', (_, value) => mainWindow.setAlwaysOnTop(value));

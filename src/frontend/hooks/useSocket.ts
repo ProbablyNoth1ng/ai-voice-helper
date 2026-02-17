@@ -32,34 +32,58 @@ export const useSocket = () => {
     reject: (error: Error) => void;
   } | null>(null);
 
-  const { setState, addMessage, setError, setShowSettings } = useVoiceStore();
+  const { setState, addMessage, setError, setShowSettings, updateConfig } = useVoiceStore();
 
   const startRecording = useCallback((): Promise<Blob> => {
     return new Promise((resolve, reject) => {
-      console.log('🎤 Starting audio recording...');
+      console.log('🎤 Starting desktop audio recording via VB-CABLE...');
 
       recordingPromiseRef.current = { resolve, reject };
 
-      navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          sampleRate: 16000
-        }
-      })
-        .then((stream) => {
-          console.log('✅ Microphone access granted');
+      navigator.mediaDevices.enumerateDevices()
+        .then(devices => {
+          console.log('📱 Available devices:', devices.filter(d => d.kind === 'audioinput'));
+          
+          const vbCableDevice = devices.find(device => 
+            device.kind === 'audioinput' && 
+            (device.label.toLowerCase().includes('cable') || 
+             device.label.toLowerCase().includes('vb-audio') ||
+             device.label.toLowerCase().includes('virtual'))
+          );
 
+          if (vbCableDevice) {
+            console.log('✅ Found VB-CABLE device:', vbCableDevice.label);
+          } else {
+            console.warn('⚠️ VB-CABLE not found, using default input');
+          }
+
+          const constraints: MediaStreamConstraints = {
+            audio: {
+              deviceId: vbCableDevice ? { exact: vbCableDevice.deviceId } : undefined,
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+              sampleRate: 16000,
+              channelCount: 1
+            }
+          };
+
+          return navigator.mediaDevices.getUserMedia(constraints);
+        })
+        .then((stream) => {
+          console.log('✅ Desktop audio access granted');
           audioChunksRef.current = [];
 
           const mediaRecorder = new MediaRecorder(stream, {
-            mimeType: 'audio/webm;codecs=opus'
+            mimeType: 'audio/webm;codecs=opus',
+            audioBitsPerSecond: 16000
           });
 
           mediaRecorderRef.current = mediaRecorder;
 
           mediaRecorder.ondataavailable = (event: BlobEvent) => {
             if (event.data.size > 0) {
+              console.log('📊 Audio chunk received:', event.data.size, 'bytes');
               audioChunksRef.current.push(event.data);
             }
           };
@@ -69,7 +93,7 @@ export const useSocket = () => {
             stream.getTracks().forEach(track => track.stop());
 
             const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-            console.log('📦 Audio blob size:', audioBlob.size);
+            console.log('📦 Final audio blob size:', audioBlob.size, 'bytes');
 
             if (recordingPromiseRef.current) {
               recordingPromiseRef.current.resolve(audioBlob);
@@ -77,20 +101,31 @@ export const useSocket = () => {
             }
           };
 
-          mediaRecorder.onerror = () => {
-            console.error('❌ MediaRecorder error');
+          mediaRecorder.onerror = (error) => {
+            console.error('❌ MediaRecorder error:', error);
             if (recordingPromiseRef.current) {
               recordingPromiseRef.current.reject(new Error('Recording failed'));
               recordingPromiseRef.current = null;
             }
           };
 
-          mediaRecorder.start(50);
-          console.log('🔴 Recording started... Press hotkey again to stop.');
+          mediaRecorder.start(100);
+          console.log('🔴 Desktop audio recording started');
         })
         .catch((err: Error) => {
           console.error('❌ Failed to start recording:', err);
-          reject(new Error(`Microphone error: ${err.message}`));
+          
+          let errorMsg = `Desktop audio capture error: ${err.message}`;
+          
+          if (err.name === 'NotFoundError') {
+            errorMsg = 'VB-CABLE not found. Please install and configure VB-CABLE.';
+          } else if (err.name === 'NotAllowedError') {
+            errorMsg = 'Microphone permission denied.';
+          } else if (err.name === 'NotReadableError') {
+            errorMsg = 'Audio device is busy.';
+          }
+          
+          reject(new Error(errorMsg));
         });
     });
   }, []);
@@ -110,12 +145,13 @@ export const useSocket = () => {
       return;
     }
 
-    if (audioBlob.size < 100) {
-      setError('Recording too short. Speak longer.');
+    if (audioBlob.size < 1000) {
+      setError('Recording too short or no audio detected.');
       setState('idle');
       return;
     }
 
+    console.log('📤 Sending audio to backend:', audioBlob.size, 'bytes');
     setState('processing');
 
     const reader = new FileReader();
@@ -123,7 +159,7 @@ export const useSocket = () => {
       const result = reader.result;
       if (typeof result === 'string') {
         const base64Audio = result.split(',')[1];
-        console.log('📤 Sending audio to backend...');
+        console.log('📤 Base64 audio length:', base64Audio.length);
         socket.emit('process-audio', { audio: base64Audio });
       }
     };
@@ -187,6 +223,13 @@ export const useSocket = () => {
     socket.on('connect', () => {
       console.log('✅ Connected:', socket.id);
       setError(null);
+      
+      socket.emit('get-config');
+    });
+
+    socket.on('current-config', (config: any) => {
+      console.log('🌍 Received config from backend:', config);
+      updateConfig(config);
     });
 
     socket.on('connect_error', (error: Error) => {
@@ -209,8 +252,9 @@ export const useSocket = () => {
       });
     });
 
-    socket.on('ai-response', ({ text }: { text: string }) => {
-      console.log('🤖 AI:', text);
+    socket.on('ai-response', ({ text, language }: { text: string; language?: string }) => {
+      console.log('🤖 AI Response:', text);
+      console.log('🌍 Response language:', language);
       addMessage({
         id: Date.now().toString(),
         text,
@@ -224,13 +268,13 @@ export const useSocket = () => {
       setError(message);
       setState('idle');
     });
- 
+
     if (!isElectron) {
       socket.on('hotkey-pressed', handleHotkeyPress);
     }
- 
+
     if (isElectron && window.electronAPI && !electronListenersRegistered) {
-      console.log('⚡ Setting up Electron hotkeys (first time only)');
+      console.log('⚡ Setting up Electron hotkeys');
       electronListenersRegistered = true;
       
       window.electronAPI.onHotkeyPressed(handleHotkeyPress);
@@ -241,7 +285,7 @@ export const useSocket = () => {
       socket.close();
       stopRecording();
     };
-  }, [setState, addMessage, setError, handleHotkeyPress, handleToggleSettings, stopRecording]);
+  }, [setState, addMessage, setError, updateConfig, handleHotkeyPress, handleToggleSettings, stopRecording]);
 
   return socketRef.current;
 };

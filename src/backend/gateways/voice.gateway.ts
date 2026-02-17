@@ -5,7 +5,8 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
   MessageBody,
-  ConnectedSocket
+  ConnectedSocket,
+  OnGatewayInit
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
@@ -17,11 +18,13 @@ import * as path from 'path';
 import * as os from 'os';
 
 interface MessageBodyPayload {
-  openaiKey:string;
-  model:string;
-  hotkey:string;
-  opacity:number;
-  alwaysOnTop:boolean;
+  openaiKey?: string;
+  model?: string;
+  hotkey?: string;
+  opacity?: number;
+  alwaysOnTop?: boolean;
+  transcriptionLanguage?: string;
+  responseLanguage?: string;
 }
 
 @WebSocketGateway(3001, { 
@@ -29,7 +32,7 @@ interface MessageBodyPayload {
   transports: ['websocket', 'polling'],
   maxHttpBufferSize: 15e6 
 })
-export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
   @WebSocketServer()
   server: Server;
 
@@ -42,6 +45,23 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly storageService: StorageServiceSimple
   ) {}
 
+  afterInit() {
+    const transcriptionLanguage = this.storageService.get('transcriptionLanguage');
+    const responseLanguage = this.storageService.get('responseLanguage');
+    
+    if (transcriptionLanguage) {
+      this.aiService.updateTranscriptionLanguage(transcriptionLanguage);
+      this.logger.log(`🌍 Loaded transcription language from storage: ${transcriptionLanguage}`);
+    }
+    
+    if (responseLanguage) {
+      this.aiService.updateResponseLanguage(responseLanguage);
+      this.logger.log(`🌍 Loaded response language from storage: ${responseLanguage}`);
+    }
+    
+    this.logger.log('✅ Gateway initialized with saved settings');
+  }
+
   handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
     
@@ -50,6 +70,16 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.emit('hotkey-pressed');
     });
  
+    const currentConfig = {
+      transcriptionLanguage: this.storageService.get('transcriptionLanguage') || 'en',
+      responseLanguage: this.storageService.get('responseLanguage') || 'en',
+      model: this.storageService.get('model') || 'gpt-4o-mini',
+      opacity: this.storageService.get('opacity') || 0.85,
+      alwaysOnTop: this.storageService.get('alwaysOnTop') ?? true,
+      hotkey: this.storageService.get('hotkey') || 'Ctrl+Shift+Q'
+    };
+    
+    client.emit('current-config', currentConfig);
     client.emit('state-change', { state: 'idle' });
   }
 
@@ -70,7 +100,8 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.isProcessing = true;
 
     try {
-      this.logger.log('🎤 Received audio data');
+      const currentResponseLang = this.storageService.get('responseLanguage') || 'en';
+      this.logger.log(`🎤 Received audio data (Response language: ${currentResponseLang})`);
       client.emit('state-change', { state: 'processing' });
 
       const audioBuffer = Buffer.from(payload.audio, 'base64');
@@ -92,11 +123,11 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.emit('transcript', { text: transcript });
 
       const response = await this.aiService.getCompletion(transcript);
-      this.logger.log(`🤖 AI Response: ${response}`);
+      this.logger.log(`🤖 AI Response (${currentResponseLang}): ${response.substring(0, 100)}...`);
 
       this.storageService.addToHistory(transcript, response);
 
-      client.emit('ai-response', { text: response });
+      client.emit('ai-response', { text: response, language: currentResponseLang });
       client.emit('state-change', { state: 'idle' });
 
     } catch (error: unknown) {
@@ -123,12 +154,14 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.isProcessing = true;
 
     try {
+      const currentResponseLang = this.storageService.get('responseLanguage') || 'en';
+      this.logger.log(`📝 Processing transcript (Response language: ${currentResponseLang})`);
       client.emit('state-change', { state: 'processing' });
 
       const response = await this.aiService.getCompletion(payload.text);
       this.storageService.addToHistory(payload.text, response);
 
-      client.emit('ai-response', { text: response });
+      client.emit('ai-response', { text: response, language: currentResponseLang });
       client.emit('state-change', { state: 'idle' });
 
     } catch (error: unknown) {
@@ -146,9 +179,6 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.isProcessing = false;
   }
 
-
-  
-
   @SubscribeMessage('update-config')
   handleUpdateConfig(
     @ConnectedSocket() client: Socket,
@@ -162,6 +192,16 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (payload.model) {
         this.aiService.updateModel(payload.model);
         this.storageService.set('model', payload.model);
+      }
+      if (payload.transcriptionLanguage) {
+        this.aiService.updateTranscriptionLanguage(payload.transcriptionLanguage);
+        this.storageService.set('transcriptionLanguage', payload.transcriptionLanguage);
+        this.logger.log(`🌍 Transcription language updated to: ${payload.transcriptionLanguage}`);
+      }
+      if (payload.responseLanguage) {
+        this.aiService.updateResponseLanguage(payload.responseLanguage);
+        this.storageService.set('responseLanguage', payload.responseLanguage);
+        this.logger.log(`🌍 Response language updated to: ${payload.responseLanguage}`);
       }
       if (payload.hotkey) {
         this.hotkeyService.updateHotkey(payload.hotkey);
@@ -184,5 +224,18 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleGetHistory(@ConnectedSocket() client: Socket) {
     const history = this.storageService.getHistory(20);
     client.emit('history', { history });
+  }
+
+  @SubscribeMessage('get-config')
+  handleGetConfig(@ConnectedSocket() client: Socket) {
+    const config = {
+      transcriptionLanguage: this.storageService.get('transcriptionLanguage') || 'en',
+      responseLanguage: this.storageService.get('responseLanguage') || 'en',
+      model: this.storageService.get('model') || 'gpt-4o-mini',
+      opacity: this.storageService.get('opacity') || 0.85,
+      alwaysOnTop: this.storageService.get('alwaysOnTop') ?? true,
+      hotkey: this.storageService.get('hotkey') || 'Ctrl+Shift+Q'
+    };
+    client.emit('current-config', config);
   }
 }

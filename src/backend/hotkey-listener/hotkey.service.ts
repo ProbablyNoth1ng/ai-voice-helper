@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { GlobalKeyboardListener } from 'node-global-key-listener';
 import { ConfigService } from '@nestjs/config';
+
+/**
+ * SIMPLIFIED HOTKEY SERVICE - NO NATIVE MODULES
+ * 
+ * This version works with your existing Electron setup.
+ * Electron handles the actual hotkey listening via globalShortcut.
+ * This service just manages the hotkey configuration.
+ */
 
 interface HotkeyConfig {
   ctrl: boolean;
@@ -11,63 +18,77 @@ interface HotkeyConfig {
 @Injectable()
 export class HotkeyService {
   private readonly logger = new Logger(HotkeyService.name);
-  private listener: GlobalKeyboardListener;
   private callback: (() => void) | null = null;
   private hotkeyConfig: HotkeyConfig = {
     ctrl: true,
     shift: true,
-    key: 'SPACE'
+    key: 'Q'
   };
 
   constructor(private configService: ConfigService) {
-    this.listener = new GlobalKeyboardListener();
     this.parseHotkeyFromEnv();
-    this.setupListeners();
+    this.logger.log('⌨️ HotkeyService initialized');
+    this.logger.log(`   Configured hotkey: ${this.getHotkeyString()}`);
+    this.logger.log('   Note: Actual hotkey listening handled by Electron globalShortcut');
   }
 
   private parseHotkeyFromEnv(): void {
-    const hotkey = this.configService.get('DEFAULT_HOTKEY') || 'Ctrl+Shift+Space';
+    const hotkey = this.configService.get('DEFAULT_HOTKEY') || 'Ctrl+Shift+Q';
     const parts = hotkey.split('+').map((p: string) => p.trim().toLowerCase());
-    
+
     this.hotkeyConfig = {
-      ctrl: parts.includes('ctrl'),
+      ctrl: parts.includes('ctrl') || parts.includes('commandorcontrol'),
       shift: parts.includes('shift'),
       key: parts[parts.length - 1].toUpperCase()
     };
 
-    this.logger.log(`Hotkey configured: ${JSON.stringify(this.hotkeyConfig)}`);
+    this.logger.log(`Hotkey parsed from env: ${JSON.stringify(this.hotkeyConfig)}`);
   }
 
-  private setupListeners(): void {
-    this.listener.addListener((e, down) => {
-      if (e.state === 'DOWN' && e.name === this.hotkeyConfig.key) {
-        const ctrlPressed = down['LEFT CTRL'] || down['RIGHT CTRL'];
-        const shiftPressed = down['LEFT SHIFT'] || down['RIGHT SHIFT'];
-
-        const matches = 
-          (!this.hotkeyConfig.ctrl || ctrlPressed) &&
-          (!this.hotkeyConfig.shift || shiftPressed);
-
-        if (matches && this.callback) {
-          this.callback();
-        }
-      }
-    });
-  }
-
+  /**
+   * Register a callback for when the hotkey is pressed.
+   * In Electron mode, this is called when the WebSocket receives the hotkey event.
+   */
   onHotkey(callback: () => void): void {
     this.callback = callback;
+    this.logger.log('Hotkey callback registered');
+  }
+
+  /**
+   * Manually trigger the hotkey callback.
+   * Called by the WebSocket gateway when Electron sends the hotkey-pressed event.
+   */
+  triggerHotkey(): void {
+    if (this.callback) {
+      this.logger.debug('Hotkey triggered');
+      this.callback();
+    } else {
+      this.logger.warn('Hotkey triggered but no callback registered');
+    }
   }
 
   updateHotkey(hotkey: string): void {
     const parts = hotkey.split('+').map((p: string) => p.trim().toLowerCase());
-    
+
     this.hotkeyConfig = {
-      ctrl: parts.includes('ctrl'),
+      ctrl: parts.includes('ctrl') || parts.includes('commandorcontrol'),
       shift: parts.includes('shift'),
       key: parts[parts.length - 1].toUpperCase()
     };
 
     this.logger.log(`Hotkey updated to: ${hotkey}`);
+    this.logger.log('Note: Electron app needs to restart to apply new hotkey');
+  }
+
+  getHotkeyString(): string {
+    const parts: string[] = [];
+    if (this.hotkeyConfig.ctrl) parts.push('Ctrl');
+    if (this.hotkeyConfig.shift) parts.push('Shift');
+    parts.push(this.hotkeyConfig.key);
+    return parts.join('+');
+  }
+
+  getHotkeyConfig(): HotkeyConfig {
+    return { ...this.hotkeyConfig };
   }
 }

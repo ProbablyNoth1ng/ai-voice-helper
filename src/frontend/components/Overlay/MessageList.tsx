@@ -2,6 +2,16 @@ import React from 'react';
 import { useVoiceStore } from '../../store/voiceStore';
 import { User, Bot } from 'lucide-react';
 
+function renderMarkdown(text: string) {
+  let formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  
+  formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  
+  formatted = formatted.replace(/\n/g, '<br>');
+  
+  return formatted;
+}
+
 export default function MessageList() {
   const { messages } = useVoiceStore();
   const recentMessages = messages.slice(-3);
@@ -31,7 +41,14 @@ export default function MessageList() {
             )}
           </div>
           <div className="flex-1">
-            <p className="text-sm text-white leading-relaxed">{message.text}</p>
+            <div 
+              className="text-sm text-white leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(message.text) }}
+              style={{
+                wordWrap: 'break-word',
+                overflowWrap: 'break-word'
+              }}
+            />
             <span className="text-xs text-gray-400 mt-1 block">
               {new Date(message.timestamp).toLocaleTimeString()}
             </span>

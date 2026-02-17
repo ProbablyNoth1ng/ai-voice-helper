@@ -12,6 +12,8 @@ interface Message {
 interface AppConfig {
   model: string;
   hotkey: string;
+  transcriptionLanguage: string;
+  responseLanguage: string;
   opacity: number;
   alwaysOnTop: boolean;
 }
@@ -36,8 +38,10 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   messages: [],
   config: {
     model: 'gpt-4o-mini',
-    hotkey: 'Ctrl+Shift+Space',
-    opacity: 0.9,
+    hotkey: 'Ctrl+Shift+Q',
+    transcriptionLanguage: 'en',
+    responseLanguage: 'en',
+    opacity: 0.6,
     alwaysOnTop: true
   },
   showSettings: false,
@@ -53,9 +57,13 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   
   clearMessages: () => set({ messages: [] }),
   
-  updateConfig: (newConfig) =>
-    set((s) => ({ config: { ...s.config, ...newConfig } })),
-  
+  updateConfig: (newConfig) => {
+      console.log('📦 Store: updateConfig ->', newConfig);
+      set((s) => ({ 
+        config: { ...s.config, ...newConfig } 
+      }));
+    },
+
   setShowSettings: (show) => {
     console.log('📦 Store: setShowSettings ->', show);
     set({ showSettings: show });

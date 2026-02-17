@@ -6,6 +6,8 @@ interface AppStorage {
   apiKey?: string;
   model?: string;
   hotkey?: string;
+  transcriptionLanguage?: string;
+  responseLanguage?: string;
   opacity?: number;
   alwaysOnTop?: boolean;
   conversationHistory?: Array<{
@@ -53,7 +55,9 @@ export class StorageServiceSimple {
   private getDefaults(): AppStorage {
     return {
       model: 'gpt-4o-mini',
-      hotkey: 'Ctrl+Shift+Space',
+      hotkey: 'Ctrl+Shift+Q',
+      transcriptionLanguage: 'en',
+      responseLanguage: 'en',
       opacity: 0.85,
       alwaysOnTop: true,
       conversationHistory: []

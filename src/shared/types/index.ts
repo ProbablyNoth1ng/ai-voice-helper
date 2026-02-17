@@ -11,6 +11,8 @@ export interface AppConfig {
   openaiKey?: string;
   model: string;
   hotkey: string;
+  transcriptionLanguage: string;
+  responseLanguage: string;
   opacity: number;
   alwaysOnTop: boolean;
 }

@@ -2,7 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-
 * {
   margin: 0;
   padding: 0;
@@ -31,7 +30,26 @@ body {
   background: #1a1a2e;   
 }
 
- 
+/* Draggable region styles for Electron */
+.drag-region {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Make all buttons and interactive elements non-draggable by default */
+button,
+input,
+select,
+textarea,
+a {
+  -webkit-app-region: no-drag;
+}
+
+/* Custom scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
@@ -50,6 +68,18 @@ body {
   background: rgba(107, 114, 128, 0.8);
 }
 
+/* Markdown formatting styles */
+strong {
+  font-weight: 700;
+  color: #fbbf24; /* Yellow for emphasis */
+}
+
+em {
+  font-style: italic;
+  color: #a78bfa; /* Purple for italic */
+}
+
+/* Animations */
 @keyframes pulse {
   0%, 100% {
     opacity: 1;
@@ -68,6 +98,7 @@ body {
   }
 }
 
+/* Kbd styling */
 kbd {
   display: inline-block;
   padding: 0.25rem 0.5rem;
@@ -79,3 +110,33 @@ kbd {
   background-color: rgba(31, 41, 55, 0.8);
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
 }
+
+/* Resize cursor for window edges (Electron handles actual resizing) */
+.window-edge {
+  position: fixed;
+  z-index: 10000;
+}
+
+.window-edge.top,
+.window-edge.bottom {
+  left: 0;
+  right: 0;
+  height: 5px;
+}
+
+.window-edge.left,
+.window-edge.right {
+  top: 0;
+  bottom: 0;
+  width: 5px;
+}
+
+.window-edge.top { top: 0; cursor: ns-resize; }
+.window-edge.bottom { bottom: 0; cursor: ns-resize; }
+.window-edge.left { left: 0; cursor: ew-resize; }
+.window-edge.right { right: 0; cursor: ew-resize; }
+
+.window-edge.top-left { top: 0; left: 0; width: 10px; height: 10px; cursor: nwse-resize; }
+.window-edge.top-right { top: 0; right: 0; width: 10px; height: 10px; cursor: nesw-resize; }
+.window-edge.bottom-left { bottom: 0; left: 0; width: 10px; height: 10px; cursor: nesw-resize; }
+.window-edge.bottom-right { bottom: 0; right: 0; width: 10px; height: 10px; cursor: nwse-resize; }
