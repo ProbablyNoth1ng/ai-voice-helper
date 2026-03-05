@@ -12,10 +12,12 @@ interface Message {
 interface AppConfig {
   model: string;
   hotkey: string;
-  transcriptionLanguage: string;
-  responseLanguage: string;
   opacity: number;
   alwaysOnTop: boolean;
+  transcriptionLanguage?: string;
+  responseLanguage?: string;
+  aiProvider?: string;  
+  aiModel?: string;  
 }
 
 interface VoiceStore {
@@ -39,10 +41,12 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   config: {
     model: 'gpt-4o-mini',
     hotkey: 'Ctrl+Shift+Q',
+    opacity: 0.9,
+    alwaysOnTop: true,
     transcriptionLanguage: 'en',
     responseLanguage: 'en',
-    opacity: 0.6,
-    alwaysOnTop: true
+    aiProvider: 'openai',
+    aiModel: 'gpt-4o-mini' 
   },
   showSettings: false,
   error: null,

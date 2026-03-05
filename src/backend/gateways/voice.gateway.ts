@@ -19,6 +19,10 @@ import * as os from 'os';
 
 interface MessageBodyPayload {
   openaiKey?: string;
+  geminiKey?: string;    
+  claudeKey?: string;     
+  aiProvider?: string;     
+  aiModel?: string;       
   model?: string;
   hotkey?: string;
   opacity?: number;
@@ -46,6 +50,19 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, O
   ) {}
 
   afterInit() {
+    const aiProvider = this.storageService.get('aiProvider');
+    const aiModel = this.storageService.get('aiModel');
+
+    if (aiProvider) {
+      this.aiService.updateProvider(aiProvider as any);
+      this.logger.log(`🤖 Restored AI provider from storage: ${aiProvider}`);
+    }
+
+    if (aiModel && aiProvider) {
+      this.aiService.updateModels({ [aiProvider]: aiModel });
+      this.logger.log(`🎯 Restored AI model from storage: ${aiModel}`);
+    }
+
     const transcriptionLanguage = this.storageService.get('transcriptionLanguage');
     const responseLanguage = this.storageService.get('responseLanguage');
     
@@ -76,7 +93,9 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       model: this.storageService.get('model') || 'gpt-4o-mini',
       opacity: this.storageService.get('opacity') || 0.85,
       alwaysOnTop: this.storageService.get('alwaysOnTop') ?? true,
-      hotkey: this.storageService.get('hotkey') || 'Ctrl+Shift+Q'
+      hotkey: this.storageService.get('hotkey') || 'Ctrl+Shift+Q',
+      aiProvider: this.storageService.get('aiProvider') || 'openai', 
+      aiModel: this.storageService.get('aiModel') || 'gpt-4o-mini', 
     };
     
     client.emit('current-config', currentConfig);
@@ -101,7 +120,8 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, O
 
     try {
       const currentResponseLang = this.storageService.get('responseLanguage') || 'en';
-      this.logger.log(`🎤 Received audio data (Response language: ${currentResponseLang})`);
+      const currentProvider = this.aiService.getCurrentProvider();
+      this.logger.log(`🎤 Received audio (Provider: ${currentProvider}, Lang: ${currentResponseLang})`);
       client.emit('state-change', { state: 'processing' });
 
       const audioBuffer = Buffer.from(payload.audio, 'base64');
@@ -123,7 +143,7 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       client.emit('transcript', { text: transcript });
 
       const response = await this.aiService.getCompletion(transcript);
-      this.logger.log(`🤖 AI Response (${currentResponseLang}): ${response.substring(0, 100)}...`);
+      this.logger.log(`🤖 AI Response (${currentProvider}): ${response.substring(0, 100)}...`);
 
       this.storageService.addToHistory(transcript, response);
 
@@ -185,12 +205,35 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     @MessageBody() payload: MessageBodyPayload,
   ) {
     try {
-      if (payload.openaiKey) {
-        this.aiService.updateApiKey(payload.openaiKey);
-        this.storageService.set('apiKey', payload.openaiKey);
+
+      if (payload.aiProvider) {
+        this.aiService.updateProvider(payload.aiProvider as any);
+        this.storageService.set('aiProvider', payload.aiProvider);
+        this.logger.log(`🤖 AI Provider switched to: ${payload.aiProvider}`);
       }
+
+
+      if (payload.aiModel) {
+        const provider = payload.aiProvider ?? this.storageService.get('aiProvider') ?? 'openai';
+        this.aiService.updateModels({ [provider]: payload.aiModel });
+        this.storageService.set('aiModel', payload.aiModel);
+        this.logger.log(`🎯 AI Model set to: ${payload.aiModel} (provider: ${provider})`);
+      }
+
+
+      if (payload.openaiKey || payload.geminiKey || payload.claudeKey) {
+        this.aiService.updateApiKeys({
+          openaiKey: payload.openaiKey,
+          geminiKey: payload.geminiKey,
+          claudeKey: payload.claudeKey,
+        });
+        if (payload.openaiKey) this.storageService.set('openaiKey', payload.openaiKey);
+        if (payload.geminiKey) this.storageService.set('geminiKey', payload.geminiKey);
+        if (payload.claudeKey) this.storageService.set('claudeKey', payload.claudeKey);
+      }
+
       if (payload.model) {
-        this.aiService.updateModel(payload.model);
+        this.aiService.updateModels({ openai: payload.model });
         this.storageService.set('model', payload.model);
       }
       if (payload.transcriptionLanguage) {
@@ -213,7 +256,11 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       if (payload.alwaysOnTop !== undefined) {
         this.storageService.set('alwaysOnTop', payload.alwaysOnTop);
       }
-      client.emit('config-updated', { success: true });
+
+      client.emit('config-updated', {
+        success: true,
+        activeProvider: this.aiService.getCurrentProvider(),
+      });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       client.emit('error', { message: errorMessage });
@@ -232,9 +279,11 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       transcriptionLanguage: this.storageService.get('transcriptionLanguage') || 'en',
       responseLanguage: this.storageService.get('responseLanguage') || 'en',
       model: this.storageService.get('model') || 'gpt-4o-mini',
-      opacity: this.storageService.get('opacity') || 0.85,
+      opacity: this.storageService.get('opacity') || 0.9,
       alwaysOnTop: this.storageService.get('alwaysOnTop') ?? true,
-      hotkey: this.storageService.get('hotkey') || 'Ctrl+Shift+Q'
+      hotkey: this.storageService.get('hotkey') || 'Ctrl+Shift+Q',
+      aiProvider: this.storageService.get('aiProvider') || 'openai',
+      aiModel: this.storageService.get('aiModel') || 'gpt-4o-mini', 
     };
     client.emit('current-config', config);
   }

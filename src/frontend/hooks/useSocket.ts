@@ -228,7 +228,7 @@ export const useSocket = () => {
     });
 
     socket.on('current-config', (config: any) => {
-      console.log('🌍 Received config from backend:', config);
+      console.log('🌍 Received config from backend:', JSON.stringify(config));
       updateConfig(config);
     });
 

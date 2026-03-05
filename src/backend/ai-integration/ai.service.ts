@@ -1,36 +1,85 @@
 import { Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import { ConfigService } from '@nestjs/config';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import Anthropic from '@anthropic-ai/sdk';
 import * as fs from 'fs';
-import { en_prompt, ru_prompt, uk_prompt } from 'src/shared/constants/prompts';
-import { en_instruction, ru_instruction, uk_instruction } from 'src/shared/constants/instructions';
+
+type AIProvider = 'openai' | 'gemini' | 'claude';
+
 @Injectable()
 export class AIService {
   private readonly logger = new Logger(AIService.name);
-  private client: OpenAI;
-  private model: string;
+  private openaiClient: OpenAI;
+  private geminiClient: GoogleGenerativeAI | null = null;
+  private claudeClient: Anthropic | null = null;
+  
+  private currentProvider: AIProvider = 'openai';
+  private openaiModel: string;
+  private geminiModel: string;
+  private claudeModel: string;
   private transcriptionLanguage: string = 'en';
-  private responseLanguage: string = 'en'; 
+  private responseLanguage: string = 'en';
 
   constructor(private configService: ConfigService) {
-    const apiKey = this.configService.get<string>('OPENAI_API_KEY');
-    this.model = this.configService.get<string>('OPENAI_MODEL') || 'gpt-4o-mini';
-    
-    if (!apiKey) {
+    const openaiKey = this.configService.get<string>('OPENAI_API_KEY');
+
+    this.openaiModel = this.configService.get<string>('OPENAI_MODEL') || 'gpt-4o-mini';
+    this.geminiModel = this.configService.get<string>('GEMINI_MODEL') || 'gemini-2.0-flash-exp';
+    this.claudeModel = this.configService.get<string>('CLAUDE_MODEL') || 'claude-3-5-sonnet-20241022';
+
+    if (!openaiKey) {
       this.logger.warn('OpenAI API key not configured');
     }
+
+    this.openaiClient = new OpenAI({ apiKey: openaiKey });
     
-    this.client = new OpenAI({ apiKey });
+    const geminiKey = this.configService.get<string>('GEMINI_API_KEY');
+    if (geminiKey) {
+      this.geminiClient = new GoogleGenerativeAI(geminiKey);
+      this.logger.log('✅ Gemini AI initialized');
+    }
+
+    const claudeKey = this.configService.get<string>('CLAUDE_API_KEY');
+    if (claudeKey) {
+      this.claudeClient = new Anthropic({ apiKey: claudeKey });
+      this.logger.log('✅ Claude AI initialized');
+    }
   }
 
-  updateApiKey(apiKey: string): void {
-    this.client = new OpenAI({ apiKey });
-    this.logger.log('OpenAI API key updated');
+  updateApiKeys(keys: { openaiKey?: string; geminiKey?: string; claudeKey?: string }): void {
+    if (keys.openaiKey) {
+      this.openaiClient = new OpenAI({ apiKey: keys.openaiKey });
+      this.logger.log('OpenAI API key updated');
+    }
+    if (keys.geminiKey) {
+      this.geminiClient = new GoogleGenerativeAI(keys.geminiKey);
+      this.logger.log('Gemini API key updated');
+    }
+    if (keys.claudeKey) {
+      this.claudeClient = new Anthropic({ apiKey: keys.claudeKey });
+      this.logger.log('Claude API key updated');
+    }
   }
 
-  updateModel(model: string): void {
-    this.model = model;
-    this.logger.log(`Model updated to: ${model}`);
+  updateProvider(provider: AIProvider): void {
+    this.currentProvider = provider;
+    this.logger.log(`AI Provider switched to: ${provider}`);
+  }
+
+  updateModels(models: { openai?: string; gemini?: string; claude?: string }): void {
+    if (models.openai) {
+      this.openaiModel = models.openai;
+      this.logger.log(`OpenAI model updated to: ${models.openai}`);
+    }
+    if (models.gemini) {
+      this.geminiModel = models.gemini;
+      this.logger.log(`Gemini model updated to: ${models.gemini}`);
+    }
+    if (models.claude) {
+      this.claudeModel = models.claude;
+      this.logger.log(`Claude model updated to: ${models.claude}`);
+    }
   }
 
   updateTranscriptionLanguage(language: string): void {
@@ -43,39 +92,14 @@ export class AIService {
     this.logger.log(`Response language updated to: ${language}`);
   }
 
-  private getSystemPrompt(): string {
-    const prompts = {
-      en: en_prompt,
-      ru: ru_prompt,
-      uk: uk_prompt
-    };
-
-    return prompts[this.responseLanguage as keyof typeof prompts] || prompts.en;
-  }
-
-  private getLanguageInstruction(): string {
-    const instructions = {
-      en:  en_instruction,
-      ru:  ru_instruction,
-      uk:  uk_instruction,
-    };
-    return instructions[this.responseLanguage as keyof typeof instructions] || instructions.en;
-  }
-
   async transcribeAudio(audioFilePath: string): Promise<string> {
     try {
-      this.logger.log(`🎤 Transcribing audio with Whisper (language: ${this.transcriptionLanguage})...`);
-      
-      const languageMap = {
-        'en': 'en',
-        'ru': 'ru',
-        'uk': 'uk'
-      };
+      this.logger.log(`🎤 Transcribing audio with Whisper (lang: ${this.transcriptionLanguage})...`);
 
-      const transcription = await this.client.audio.transcriptions.create({
+      const transcription = await this.openaiClient.audio.transcriptions.create({
         file: fs.createReadStream(audioFilePath),
         model: 'whisper-1',
-        language: languageMap[this.transcriptionLanguage as keyof typeof languageMap] || 'en',
+        language: this.transcriptionLanguage, // ✅ Fixed: use dynamic language
         response_format: 'text'
       });
 
@@ -90,35 +114,101 @@ export class AIService {
 
   async getCompletion(prompt: string): Promise<string> {
     try {
-      this.logger.log(`🤖 Generating response in ${this.responseLanguage}...`);
-      this.logger.log(`📝 Original prompt: ${prompt}`);
-      
-      const enhancedPrompt = `${this.getLanguageInstruction()}\n\nQuestion: ${prompt}`;
-      
-      const completion = await this.client.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: this.getSystemPrompt()
-          },
-          {
-            role: 'user',
-            content: enhancedPrompt
-          }
-        ],
-        max_tokens: 500,
-        temperature: 0.7
-      });
+      this.logger.log(`🤖 Getting completion from ${this.currentProvider}...`);
 
-      const response = completion.choices[0]?.message?.content || 'No response generated.';
-      this.logger.log(`✅ Generated response (${this.responseLanguage}): ${response.substring(0, 100)}...`);
-      
-      return response;
+      switch (this.currentProvider) {
+        case 'openai':
+          return await this.getOpenAICompletion(prompt);
+        case 'gemini':
+          return await this.getGeminiCompletion(prompt);
+        case 'claude':
+          return await this.getClaudeCompletion(prompt);
+        default:
+          throw new Error(`Unknown AI provider: ${this.currentProvider}`);
+      }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error('OpenAI API error:', errorMessage);
-      throw new Error('Failed to get AI response: ' + errorMessage);
+      this.logger.error(`AI API error (${this.currentProvider}):`, errorMessage);
+      throw new Error(`Failed to get AI response from ${this.currentProvider}: ` + errorMessage);
     }
+  }
+
+  private async getOpenAICompletion(prompt: string): Promise<string> {
+    const completion = await this.openaiClient.chat.completions.create({
+      model: this.openaiModel,
+      messages: [
+        {
+          role: 'system',
+          content: process.env.SYSTEM_PROMPT || 'You are a helpful AI interview assistant.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      max_tokens: 500,
+      temperature: 0.7
+    });
+
+    return completion.choices[0]?.message?.content || 'No response generated.';
+  }
+
+  private async getGeminiCompletion(prompt: string): Promise<string> {
+    if (!this.geminiClient) {
+      throw new Error('Gemini API key not configured');
+    }
+
+    const model = this.geminiClient.getGenerativeModel({ 
+      model: this.geminiModel,
+      generationConfig: {
+        maxOutputTokens: 500,
+        temperature: 0.7,
+      }
+    });
+
+    const systemPrompt = process.env.SYSTEM_PROMPT || 'You are a helpful AI interview assistant.';
+    const fullPrompt = `${systemPrompt}\n\nUser: ${prompt}`;
+
+    const result = await model.generateContent(fullPrompt);
+    const response = result.response;
+    return response.text() || 'No response generated.';
+  }
+
+  private async getClaudeCompletion(prompt: string): Promise<string> {
+    if (!this.claudeClient) {
+      throw new Error('Claude API key not configured');
+    }
+
+    const message = await this.claudeClient.messages.create({
+      model: this.claudeModel,
+      max_tokens: 500,
+      temperature: 0.7,
+      system: process.env.SYSTEM_PROMPT || 'You are a helpful AI interview assistant.',
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    });
+
+    const content = message.content[0];
+    if (content.type === 'text') {
+      return content.text || 'No response generated.';
+    }
+    
+    return 'No response generated.';
+  }
+
+  getCurrentProvider(): AIProvider {
+    return this.currentProvider;
+  }
+
+  getAvailableProviders(): { provider: AIProvider; available: boolean }[] {
+    return [
+      { provider: 'openai', available: !!this.openaiClient },
+      { provider: 'gemini', available: !!this.geminiClient },
+      { provider: 'claude', available: !!this.claudeClient }
+    ];
   }
 }

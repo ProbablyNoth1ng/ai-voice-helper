@@ -26,21 +26,24 @@ export default function Overlay() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <GripHorizontal className="w-4 h-4 text-gray-500" />
           <h1 className="text-sm font-bold text-white">
-            🎤 AI Interview Helper
+             AI Interview Helper
           </h1>
         </div>
         
         <button
           onClick={() => setShowSettings(true)}
-          className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+          className="p-2 hover:bg-gray-700 text-gray-100 rounded-lg transition-colors"
           style={{
             // @ts-ignore
             WebkitAppRegion: 'no-drag',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            backgroundColor: 'transparent',
+            color: 'white',
+            border: 'none',
           }}
           title="Settings (Ctrl+Shift+S)"
         >
-          <Settings className="w-4 h-4 text-gray-400 hover:text-white" />
+          <Settings className="w-4 h-4  hover:text-white" fill='transparent' />
         </button>
       </div>
  

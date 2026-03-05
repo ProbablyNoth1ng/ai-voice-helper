@@ -10,6 +10,11 @@ interface AppStorage {
   responseLanguage?: string;
   opacity?: number;
   alwaysOnTop?: boolean;
+  aiProvider?: string;
+  aiModel?: string;
+  openaiKey?: string;
+  geminiKey?: string;
+  claudeKey?: string;
   conversationHistory?: Array<{
     timestamp: number;
     userMessage: string;
@@ -31,13 +36,9 @@ export class StorageServiceSimple {
 
   private loadData(): void {
     try {
-      if (fs.existsSync(this.storePath)) {
-        const content = fs.readFileSync(this.storePath, 'utf-8');
-        this.data = JSON.parse(content);
-      } else {
-        this.data = this.getDefaults();
-        this.saveData();
-      }
+      this.data = this.getDefaults();
+      this.saveData();
+    
     } catch (error) {
       this.logger.error('Failed to load storage', error);
       this.data = this.getDefaults();
@@ -58,8 +59,10 @@ export class StorageServiceSimple {
       hotkey: 'Ctrl+Shift+Q',
       transcriptionLanguage: 'en',
       responseLanguage: 'en',
-      opacity: 0.85,
+      opacity: 0.9,
       alwaysOnTop: true,
+      aiProvider: 'openai',      
+      aiModel: 'gpt-4o-mini',      
       conversationHistory: []
     };
   }

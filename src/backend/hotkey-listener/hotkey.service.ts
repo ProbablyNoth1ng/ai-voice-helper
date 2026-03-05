@@ -1,14 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-
-/**
- * SIMPLIFIED HOTKEY SERVICE - NO NATIVE MODULES
- * 
- * This version works with your existing Electron setup.
- * Electron handles the actual hotkey listening via globalShortcut.
- * This service just manages the hotkey configuration.
- */
-
 interface HotkeyConfig {
   ctrl: boolean;
   shift: boolean;
@@ -45,19 +36,11 @@ export class HotkeyService {
     this.logger.log(`Hotkey parsed from env: ${JSON.stringify(this.hotkeyConfig)}`);
   }
 
-  /**
-   * Register a callback for when the hotkey is pressed.
-   * In Electron mode, this is called when the WebSocket receives the hotkey event.
-   */
   onHotkey(callback: () => void): void {
     this.callback = callback;
     this.logger.log('Hotkey callback registered');
   }
 
-  /**
-   * Manually trigger the hotkey callback.
-   * Called by the WebSocket gateway when Electron sends the hotkey-pressed event.
-   */
   triggerHotkey(): void {
     if (this.callback) {
       this.logger.debug('Hotkey triggered');

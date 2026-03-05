@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Save, Eye, Pin, Languages, MessageSquare, CheckCircle } from 'lucide-react';
+import { X, Save, Eye, Pin, Languages, MessageSquare, CheckCircle, Key } from 'lucide-react';
 import { useVoiceStore } from '../../store/voiceStore';
 import { io } from 'socket.io-client';
 
@@ -21,6 +21,10 @@ export default function SettingsPanel() {
   const [localConfig, setLocalConfig] = useState(config);
   const [saved, setSaved] = useState(false);
 
+  const [openaiKey, setOpenaiKey] = useState('');
+  const [geminiKey, setGeminiKey] = useState('');
+  const [claudeKey, setClaudeKey] = useState('');
+
   useEffect(() => {
     setLocalConfig(config);
   }, [config]);
@@ -32,29 +36,39 @@ export default function SettingsPanel() {
 
   const handleOpacityChange = (value: number) => {
     setLocalConfig({ ...localConfig, opacity: value });
-     
     if (window.electronAPI) {
       window.electronAPI.setOpacity(value);
     }
   };
- 
+
   const handleAlwaysOnTopChange = () => {
     const newValue = !localConfig.alwaysOnTop;
     setLocalConfig({ ...localConfig, alwaysOnTop: newValue });
-     
     if (window.electronAPI) {
       window.electronAPI.setAlwaysOnTop(newValue);
     }
   };
 
   const handleTranscriptionLanguageChange = (language: string) => {
-    console.log('🌍 Transcription language changed to:', language);
     setLocalConfig({ ...localConfig, transcriptionLanguage: language });
   };
 
   const handleResponseLanguageChange = (language: string) => {
-    console.log('🌍 Response language changed to:', language);
     setLocalConfig({ ...localConfig, responseLanguage: language });
+  };
+
+  const handleAIProviderChange = (provider: string) => {
+    console.log('🤖 AI Provider changed to:', provider);
+    const providerObj = aiProviders.find(p => p.id === provider);
+    setLocalConfig({
+      ...localConfig,
+      aiProvider: provider,
+      aiModel: providerObj?.models[0] ?? localConfig.aiModel,
+    });
+  };
+
+  const handleAIModelChange = (model: string) => {
+    setLocalConfig({ ...localConfig, aiModel: model });
   };
 
   const handleSave = () => {
@@ -62,10 +76,18 @@ export default function SettingsPanel() {
     updateConfig(localConfig);
     
     const socket = io('http://localhost:3001');
-    socket.emit('update-config', localConfig);
+
+    const payload: Record<string, unknown> = {
+      ...localConfig,
+    };
+    if (openaiKey.trim()) payload.openaiKey = openaiKey.trim();
+    if (geminiKey.trim()) payload.geminiKey = geminiKey.trim();
+    if (claudeKey.trim()) payload.claudeKey = claudeKey.trim();
+
+    socket.emit('update-config', payload);
     
-    socket.on('config-updated', () => {
-      console.log('✅ Config updated on backend');
+    socket.on('config-updated', (data: { success: boolean; activeProvider: string }) => {
+      console.log('✅ Config updated on backend. Active provider:', data.activeProvider);
       socket.close();
     });
   
@@ -74,7 +96,6 @@ export default function SettingsPanel() {
   };
 
   const handleClose = () => {
-    console.log('⚙️ Closing settings');
     setShowSettings(false);
   };
 
@@ -84,68 +105,76 @@ export default function SettingsPanel() {
     { code: 'uk', label: '🇺🇦 Українська', name: 'Ukrainian' }
   ];
 
+  const aiProviders = [
+    { id: 'openai', name: 'OpenAI (ChatGPT)', icon: '🤖', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'], keyLabel: 'OpenAI API Key', keyPlaceholder: 'sk-...' },
+    { id: 'gemini', name: 'Google Gemini', icon: '✨', models: ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro'], keyLabel: 'Gemini API Key', keyPlaceholder: 'AIza...' },
+    { id: 'claude', name: 'Anthropic Claude', icon: '🧠', models: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307', 'claude-3-opus-20240229'], keyLabel: 'Claude API Key', keyPlaceholder: 'sk-ant-...' }
+  ];
+
+  const currentProvider = aiProviders.find(p => p.id === (localConfig.aiProvider || 'openai'));
+
+  const keyValueMap: Record<string, string> = {
+    openai: openaiKey,
+    gemini: geminiKey,
+    claude: claudeKey,
+  };
+
+  const keySetterMap: Record<string, (v: string) => void> = {
+    openai: setOpenaiKey,
+    gemini: setGeminiKey,
+    claude: setClaudeKey,
+  };
+
+  const activeProvider = localConfig.aiProvider || 'openai';
+
   return (
     <div 
       style={{
         position: 'fixed',
         top: 0,
         left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 9999,
+        width: '100vw',
+        height: '100vh',
+        zIndex: 999999,
         display: 'flex',
-        alignItems: 'flex-start',
-        justifyContent: 'flex-end',
-        padding: '32px',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
         // @ts-ignore
         WebkitAppRegion: 'no-drag'
       }}
-    > 
-      <div 
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          // @ts-ignore
-          WebkitAppRegion: 'no-drag'
-        }}
-        onClick={handleClose}
-      />
-       
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
       <div 
         style={{
           position: 'relative',
           backgroundColor: '#111827',
           borderRadius: '16px',
           border: '1px solid #374151',
-          width: '384px',
-          maxHeight: '80vh',
+          width: '400px',
+          maxHeight: '85vh',
           overflow: 'hidden',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-          // @ts-ignore 
+          zIndex: 1000000,
+          // @ts-ignore
           WebkitAppRegion: 'no-drag'
         }}
-      > 
-        <div 
-          style={{
-            backgroundColor: '#1f2937',
-            borderBottom: '1px solid #374151',
-            padding: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            // @ts-ignore
-            WebkitAppRegion: 'no-drag'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: 'white', margin: 0 }}>
-              Settings
-            </h2>
-          </div>
+        onClick={(e) => e.stopPropagation()}
+      >
+
+        <div style={{
+          backgroundColor: '#1f2937',
+          borderBottom: '1px solid #374151',
+          padding: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: 'white', margin: 0 }}>
+            Settings
+          </h2>
           <button
             onClick={handleClose}
             style={{
@@ -157,8 +186,6 @@ export default function SettingsPanel() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              // @ts-ignore
-              WebkitAppRegion: 'no-drag'
             }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#374151'}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -167,20 +194,15 @@ export default function SettingsPanel() {
           </button>
         </div>
 
-        <div 
-          className="custom-scrollbar"
-          style={{ 
-            padding: '24px', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            gap: '24px',
-            maxHeight: 'calc(80vh - 72px)',
-            overflowY: 'auto',
-            // @ts-ignore
-            WebkitAppRegion: 'no-drag'
-          }}
-        >
-          
+        <div className="custom-scrollbar" style={{
+          padding: '24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '24px',
+          maxHeight: 'calc(85vh - 72px)',
+          overflowY: 'auto'
+        }}>
+
           <div style={{
             backgroundColor: '#1e3a8a',
             border: '1px solid #3b82f6',
@@ -191,108 +213,105 @@ export default function SettingsPanel() {
           }}>
             <CheckCircle style={{ width: '20px', height: '20px', color: '#60a5fa', flexShrink: 0 }} />
             <div style={{ fontSize: '13px', color: '#bfdbfe', lineHeight: '1.5' }}>
-              <strong>Language Settings:</strong> Audio will be transcribed in <strong>{localConfig.transcriptionLanguage.toUpperCase()}</strong>, and AI will respond in <strong>{localConfig.responseLanguage.toUpperCase()}</strong>.
+              <strong>Active:</strong> {currentProvider?.icon} {currentProvider?.name} — {localConfig.aiModel || currentProvider?.models[0]}
             </div>
           </div>
 
           <div>
-            <label 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px', 
-                fontSize: '14px', 
-                fontWeight: '500', 
-                color: '#d1d5db',
-                marginBottom: '12px'
-              }}
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
+              <span style={{ fontSize: '18px' }}>🤖</span>
+              AI Provider
+            </label>
+            <select
+              value={localConfig.aiProvider || 'openai'}
+              onChange={(e) => handleAIProviderChange(e.target.value)}
+              style={selectStyle}
             >
+              {aiProviders.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.icon} {provider.name}
+                </option>
+              ))}
+            </select>
+            <p style={hintStyle}>
+              {activeProvider === 'openai' && '🤖 ChatGPT — Most popular, reliable'}
+              {activeProvider === 'gemini' && '✨ Gemini — Fast, low cost'}
+              {activeProvider === 'claude' && '🧠 Claude — Best for complex reasoning'}
+            </p>
+          </div>
+
+          {/* AI Model */}
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
+              <span style={{ fontSize: '18px' }}>🎯</span>
+              AI Model
+            </label>
+            <select
+              value={localConfig.aiModel || currentProvider?.models[0]}
+              onChange={(e) => handleAIModelChange(e.target.value)}
+              style={selectStyle}
+            >
+              {currentProvider?.models.map((model) => (
+                <option key={model} value={model}>{model}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
+              <Key style={{ width: '16px', height: '16px' }} />
+              {currentProvider?.keyLabel}
+            </label>
+            <input
+              type="password"
+              placeholder={`Enter ${currentProvider?.keyPlaceholder} — leave blank to keep existing`}
+              value={keyValueMap[activeProvider] || ''}
+              onChange={(e) => keySetterMap[activeProvider]?.(e.target.value)}
+              style={{
+                ...selectStyle,
+                fontFamily: 'monospace',
+              }}
+            />
+            <p style={hintStyle}>
+              🔑 Only fill this if you want to update the key. Leave blank to keep current.
+            </p>
+          </div>
+
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
               <Languages style={{ width: '16px', height: '16px' }} />
-              Transcription Language (What language to listen)
+              Transcription Language
             </label>
             <select
-              value={localConfig.transcriptionLanguage}
+              value={localConfig.transcriptionLanguage || 'en'}
               onChange={(e) => handleTranscriptionLanguageChange(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid #374151',
-                backgroundColor: '#1f2937',
-                color: '#d1d5db',
-                fontSize: '14px',
-                cursor: 'pointer',
-                outline: 'none'
-              }}
+              style={selectStyle}
             >
               {languageOptions.map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.label}
-                </option>
+                <option key={lang.code} value={lang.code}>{lang.label}</option>
               ))}
             </select>
-            <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px', margin: '8px 0 0 0' }}>
-              {localConfig.transcriptionLanguage === 'en' && '🎤 Audio will be transcribed from English'}
-              {localConfig.transcriptionLanguage === 'ru' && '🎤 Аудио будет распознано с русского'}
-              {localConfig.transcriptionLanguage === 'uk' && '🎤 Аудіо буде розпізнано з українскої'}
-            </p>
           </div>
 
           <div>
-            <label 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px', 
-                fontSize: '14px', 
-                fontWeight: '500', 
-                color: '#d1d5db',
-                marginBottom: '12px'
-              }}
-            >
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
               <MessageSquare style={{ width: '16px', height: '16px' }} />
-              Response Language (AI reply language)
+              Response Language
             </label>
             <select
-              value={localConfig.responseLanguage}
+              value={localConfig.responseLanguage || 'en'}
               onChange={(e) => handleResponseLanguageChange(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid #374151',
-                backgroundColor: '#1f2937',
-                color: '#d1d5db',
-                fontSize: '14px',
-                cursor: 'pointer',
-                outline: 'none'
-              }}
+              style={selectStyle}
             >
               {languageOptions.map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.label}
-                </option>
+                <option key={lang.code} value={lang.code}>{lang.label}</option>
               ))}
             </select>
-            <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px', margin: '8px 0 0 0' }}>
-              {localConfig.responseLanguage === 'en' && '🤖 AI will respond in English'}
-              {localConfig.responseLanguage === 'ru' && '🤖 ИИ будет отвечать на русском'}
-              {localConfig.responseLanguage === 'uk' && '🤖 ШІ буде відповідати українською'}
-            </p>
           </div>
 
+          {/* Opacity */}
           <div>
-            <label 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px', 
-                fontSize: '14px', 
-                fontWeight: '500', 
-                color: '#d1d5db',
-                marginBottom: '12px'
-              }}
-            >
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
               <Eye style={{ width: '16px', height: '16px' }} />
               Opacity: {Math.round(localConfig.opacity * 100)}%
             </label>
@@ -308,16 +327,7 @@ export default function SettingsPanel() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <label 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px', 
-                fontSize: '14px', 
-                fontWeight: '500', 
-                color: '#d1d5db' 
-              }}
-            >
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db' }}>
               <Pin style={{ width: '16px', height: '16px' }} />
               Always on Top
             </label>
@@ -336,20 +346,19 @@ export default function SettingsPanel() {
                 transition: 'background-color 0.2s'
               }}
             >
-              <span 
-                style={{
-                  display: 'inline-block',
-                  height: '16px',
-                  width: '16px',
-                  borderRadius: '9999px',
-                  backgroundColor: 'white',
-                  transform: localConfig.alwaysOnTop ? 'translateX(24px)' : 'translateX(4px)',
-                  transition: 'transform 0.2s'
-                }}
-              />
+              <span style={{
+                display: 'inline-block',
+                height: '16px',
+                width: '16px',
+                borderRadius: '9999px',
+                backgroundColor: 'white',
+                transform: localConfig.alwaysOnTop ? 'translateX(24px)' : 'translateX(4px)',
+                transition: 'transform 0.2s'
+              }} />
             </button>
           </div>
 
+          {/* Save */}
           <button
             onClick={handleSave}
             style={{
@@ -367,23 +376,13 @@ export default function SettingsPanel() {
               cursor: 'pointer',
               transition: 'background-color 0.2s'
             }}
-            onMouseEnter={(e) => {
-              if (!saved) e.currentTarget.style.backgroundColor = '#1d4ed8';
-            }}
-            onMouseLeave={(e) => {
-              if (!saved) e.currentTarget.style.backgroundColor = '#2563eb';
-            }}
+            onMouseEnter={(e) => { if (!saved) e.currentTarget.style.backgroundColor = '#1d4ed8'; }}
+            onMouseLeave={(e) => { if (!saved) e.currentTarget.style.backgroundColor = '#2563eb'; }}
           >
             {saved ? (
-              <>
-                <CheckCircle style={{ width: '16px', height: '16px' }} />
-                Saved!
-              </>
+              <><CheckCircle style={{ width: '16px', height: '16px' }} /> Saved!</>
             ) : (
-              <>
-                <Save style={{ width: '16px', height: '16px' }} />
-                Save Settings
-              </>
+              <><Save style={{ width: '16px', height: '16px' }} /> Save Settings</>
             )}
           </button>
         </div>
@@ -391,3 +390,21 @@ export default function SettingsPanel() {
     </div>
   );
 }
+
+const selectStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 12px',
+  borderRadius: '8px',
+  border: '1px solid #374151',
+  backgroundColor: '#1f2937',
+  color: '#d1d5db',
+  fontSize: '14px',
+  cursor: 'pointer',
+  outline: 'none',
+};
+
+const hintStyle: React.CSSProperties = {
+  fontSize: '12px',
+  color: '#6b7280',
+  margin: '8px 0 0 0',
+};

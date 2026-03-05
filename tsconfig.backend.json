@@ -17,12 +17,12 @@
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
-    "esModuleInterop": true,
     "resolveJsonModule": true,
-    "moduleResolution": "node",
-    "types": ["node"],
-    "lib": ["ES2021"]
+    "esModuleInterop": true,
+    "paths": {
+      "src/*": ["src/*"]
+    }
   },
-  "include": ["src/backend/**/*"],
-  "exclude": ["node_modules", "dist", "test", "src/frontend/**/*"]
+  "include": ["src/backend/**/*", "src/shared/**/*"],
+  "exclude": ["node_modules", "dist", "dist-frontend", "src/frontend"]
 }

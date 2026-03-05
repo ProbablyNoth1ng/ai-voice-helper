@@ -26,14 +26,18 @@ function createWindow() {
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: true,
+    opacity: 0.9,
     backgroundColor: '#1a1a2e',
+    show: false, 
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      devTools: true
+      devTools: false
     }
   });
+ 
+  mainWindow.setSkipTaskbar(true);
  
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     const allowedPermissions = ['media', 'microphone', 'audioCapture'];
@@ -54,6 +58,11 @@ function createWindow() {
     console.log('📦 Loading from:', frontendPath);
     mainWindow.loadFile(frontendPath);
   }
+ 
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    mainWindow.setSkipTaskbar(true); // Ensure it's still hidden after showing
+  });
 
   mainWindow.setContentProtection(true);
 
@@ -95,7 +104,8 @@ function toggleWindow() {
     mainWindow.hide();
   } else {
     mainWindow.show();
-    mainWindow.focus();
+    mainWindow.focus(); 
+    mainWindow.setSkipTaskbar(true);
   }
 }
 
@@ -126,7 +136,8 @@ function startBackend() {
     return;
   }
 
-  const backendPath = path.join(__dirname, '../dist/main.js');
+  const backendPath = path.join(__dirname, '../dist/backend/main.js');
+  
   console.log('📡 Starting backend from:', backendPath);
 
   try {
@@ -190,6 +201,9 @@ app.on('window-all-closed', () => {
 
  
 ipcMain.on('hide-window', () => mainWindow.hide());
-ipcMain.on('show-window', () => mainWindow.show());
+ipcMain.on('show-window', () => {
+  mainWindow.show();
+  mainWindow.setSkipTaskbar(true); // Re-ensure hidden from taskbar
+});
 ipcMain.on('set-always-on-top', (_, value) => mainWindow.setAlwaysOnTop(value));
 ipcMain.on('set-opacity', (_, value) => mainWindow.setOpacity(value));

@@ -27,6 +27,9 @@ export default function App() {
   }, [showSettings, setShowSettings]);
 
   return (
+    <>
+    
+  
     <div className="w-full h-full bg-gray-900 text-white font-sans relative">
       {error && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-[100]">
@@ -35,13 +38,13 @@ export default function App() {
       )}  
       
       <Overlay />
-      
+       </div>
       {showSettings && (
         <>
           {console.log('🔧 Rendering SettingsPanel')}
           <SettingsPanel />
         </>
       )}
-    </div>
+     </>
   );
 }
