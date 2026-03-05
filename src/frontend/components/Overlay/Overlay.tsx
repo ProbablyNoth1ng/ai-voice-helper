@@ -4,56 +4,85 @@ import MessageList from './MessageList';
 import { GripHorizontal, Settings } from 'lucide-react';
 
 export default function Overlay() {
-  const { setShowSettings, config } = useVoiceStore();
+  const { setShowSettings } = useVoiceStore();
 
   return (
-    <div className="w-full h-full bg-gray-900 flex flex-col text-white font-sans">
+    <div style={{
+      width: '100%',
+      height: '100vh',
+      backgroundColor: '#111827',
+      display: 'flex',
+      flexDirection: 'column',
+      color: 'white',
+      fontFamily: 'sans-serif',
+      overflow: 'hidden',
+    }}>
 
-      <div 
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '8px 16px',
-          backgroundColor: '#1f2937',
-          borderBottom: '1px solid #374151',
-          // @ts-ignore
-          WebkitAppRegion: 'drag',
-          userSelect: 'none',
-          cursor: 'move'
-        }}
-      >
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '8px 16px',
+        backgroundColor: '#1f2937',
+        borderBottom: '1px solid #374151',
+        flexShrink: 0,  
+        // @ts-ignore
+        WebkitAppRegion: 'drag',
+        userSelect: 'none',
+        cursor: 'move',
+      }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <GripHorizontal className="w-4 h-4 text-gray-500" />
-          <h1 className="text-sm font-bold text-white">
-             AI Interview Helper
+          <h1 style={{ fontSize: '14px', fontWeight: 'bold', color: 'white', margin: 0 }}>
+            AI Interview Helper
           </h1>
         </div>
-        
+
         <button
           onClick={() => setShowSettings(true)}
-          className="p-2 hover:bg-gray-700 text-gray-100 rounded-lg transition-colors"
           style={{
+            padding: '8px',
+            backgroundColor: 'transparent',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            color: 'white',
             // @ts-ignore
             WebkitAppRegion: 'no-drag',
-            cursor: 'pointer',
-            backgroundColor: 'transparent',
-            color: 'white',
-            border: 'none',
           }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#374151'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
           title="Settings (Ctrl+Shift+S)"
         >
-          <Settings className="w-4 h-4  hover:text-white" fill='transparent' />
+          <Settings className="w-4 h-4" />
         </button>
       </div>
- 
-      <div className="flex-1 p-6 flex flex-col overflow-hidden">
+
+      <div style={{ flexShrink: 0, padding: '12px 24px 0' }}>
         <StateIndicator />
-        <div className="flex-1 overflow-hidden">
-          <MessageList />
-        </div>
+      </div>
+
+
+      <div
+        className="custom-scrollbar"
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '8px 24px',
+          // @ts-ignore
+          WebkitAppRegion: 'no-drag',
+        }}
+      >
+        <MessageList />
+      </div>
+
+      <div style={{ flexShrink: 0, padding: '0 24px 16px' }}>
         <HotkeyHint />
       </div>
+
     </div>
   );
 }
@@ -63,47 +92,44 @@ function HotkeyHint() {
 
   const hints = {
     en: {
-      languages: `Listening: ${config.transcriptionLanguage.toUpperCase()} → Responding: ${config.responseLanguage.toUpperCase()}`,
+      languages: `Listening: ${config.transcriptionLanguage?.toUpperCase()} → Responding: ${config.responseLanguage?.toUpperCase()}`,
       capture: 'start/stop capture',
       settings: 'settings',
       hide: 'hide'
     },
     ru: {
-      languages: `Слушаю: ${config.transcriptionLanguage.toUpperCase()} → Отвечаю: ${config.responseLanguage.toUpperCase()}`,
+      languages: `Слушаю: ${config.transcriptionLanguage?.toUpperCase()} → Отвечаю: ${config.responseLanguage?.toUpperCase()}`,
       capture: 'начать/остановить захват',
       settings: 'настройки',
       hide: 'скрыть'
     },
     uk: {
-      languages: `Слухаю: ${config.transcriptionLanguage.toUpperCase()} → Відповідаю: ${config.responseLanguage.toUpperCase()}`,
+      languages: `Слухаю: ${config.transcriptionLanguage?.toUpperCase()} → Відповідаю: ${config.responseLanguage?.toUpperCase()}`,
       capture: 'почати/зупинити захоплення',
       settings: 'налаштування',
       hide: 'сховати'
+    },
+    pl: {
+      languages: `Słucham: ${config.transcriptionLanguage?.toUpperCase()} → Odpowiadam: ${config.responseLanguage?.toUpperCase()}`,
+      capture: 'start/stop nagrywania',
+      settings: 'ustawienia',
+      hide: 'ukryj'
     }
   };
 
   const currentHints = hints[config.responseLanguage as keyof typeof hints] || hints.en;
 
   return (
-    <div className="mt-4 pt-4 border-t border-gray-700 text-center">
-      <p className="text-xs text-green-400 mb-2">
+    <div style={{ borderTop: '1px solid #374151', paddingTop: '12px', textAlign: 'center' }}>
+      <p style={{ fontSize: '11px', color: '#34d399', marginBottom: '6px' }}>
         📢 {currentHints.languages}
       </p>
-      <p className="text-xs text-gray-400">
-        <kbd className="px-2 py-1 bg-gray-700 rounded text-gray-300 font-mono text-xs">
-          {config.hotkey}
-        </kbd>
-        {' '}{currentHints.capture}
+      <p style={{ fontSize: '11px', color: '#6b7280', margin: 0 }}>
+        <kbd>{config.hotkey}</kbd> {currentHints.capture}
         {' • '}
-        <kbd className="px-2 py-1 bg-gray-700 rounded text-gray-300 font-mono text-xs">
-          Ctrl+Shift+S
-        </kbd>
-        {' '}{currentHints.settings}
+        <kbd>Ctrl+Shift+S</kbd> {currentHints.settings}
         {' • '}
-        <kbd className="px-2 py-1 bg-gray-700 rounded text-gray-300 font-mono text-xs">
-          Ctrl+Shift+H
-        </kbd>
-        {' '}{currentHints.hide}
+        <kbd>Ctrl+Shift+H</kbd> {currentHints.hide}
       </p>
     </div>
   );

@@ -21,6 +21,7 @@ export default function SettingsPanel() {
   const [localConfig, setLocalConfig] = useState(config);
   const [saved, setSaved] = useState(false);
 
+  // ✅ Per-provider API key fields (not stored in main config, sent on save only)
   const [openaiKey, setOpenaiKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [claudeKey, setClaudeKey] = useState('');
@@ -59,6 +60,7 @@ export default function SettingsPanel() {
 
   const handleAIProviderChange = (provider: string) => {
     console.log('🤖 AI Provider changed to:', provider);
+    // ✅ Reset aiModel to the first model of the new provider
     const providerObj = aiProviders.find(p => p.id === provider);
     setLocalConfig({
       ...localConfig,
@@ -76,7 +78,7 @@ export default function SettingsPanel() {
     updateConfig(localConfig);
     
     const socket = io('http://localhost:3001');
-
+ 
     const payload: Record<string, unknown> = {
       ...localConfig,
     };
@@ -112,7 +114,7 @@ export default function SettingsPanel() {
   ];
 
   const currentProvider = aiProviders.find(p => p.id === (localConfig.aiProvider || 'openai'));
-
+ 
   const keyValueMap: Record<string, string> = {
     openai: openaiKey,
     gemini: geminiKey,
@@ -155,7 +157,9 @@ export default function SettingsPanel() {
           border: '1px solid #374151',
           width: '400px',
           maxHeight: '85vh',
-          overflow: 'hidden',
+          overflow: 'visible', 
+          display: 'flex',
+          flexDirection: 'column',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
           zIndex: 1000000,
           // @ts-ignore
@@ -163,7 +167,7 @@ export default function SettingsPanel() {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-
+        {/* Header */}
         <div style={{
           backgroundColor: '#1f2937',
           borderBottom: '1px solid #374151',
@@ -193,16 +197,20 @@ export default function SettingsPanel() {
             <X style={{ width: '20px', height: '20px', color: '#9ca3af' }} />
           </button>
         </div>
-
+ 
         <div className="custom-scrollbar" style={{
           padding: '24px',
           display: 'flex',
           flexDirection: 'column',
           gap: '24px',
           maxHeight: 'calc(85vh - 72px)',
-          overflowY: 'auto'
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          borderRadius: '0 0 16px 16px',
+          // @ts-ignore
+          WebkitAppRegion: 'no-drag'
         }}>
-
+ 
           <div style={{
             backgroundColor: '#1e3a8a',
             border: '1px solid #3b82f6',
@@ -216,7 +224,7 @@ export default function SettingsPanel() {
               <strong>Active:</strong> {currentProvider?.icon} {currentProvider?.name} — {localConfig.aiModel || currentProvider?.models[0]}
             </div>
           </div>
-
+ 
           <div>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
               <span style={{ fontSize: '18px' }}>🤖</span>
@@ -239,8 +247,7 @@ export default function SettingsPanel() {
               {activeProvider === 'claude' && '🧠 Claude — Best for complex reasoning'}
             </p>
           </div>
-
-          {/* AI Model */}
+ 
           <div>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
               <span style={{ fontSize: '18px' }}>🎯</span>
@@ -256,7 +263,7 @@ export default function SettingsPanel() {
               ))}
             </select>
           </div>
-
+ 
           <div>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
               <Key style={{ width: '16px', height: '16px' }} />
@@ -276,7 +283,7 @@ export default function SettingsPanel() {
               🔑 Only fill this if you want to update the key. Leave blank to keep current.
             </p>
           </div>
-
+ 
           <div>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
               <Languages style={{ width: '16px', height: '16px' }} />
@@ -292,7 +299,7 @@ export default function SettingsPanel() {
               ))}
             </select>
           </div>
-
+ 
           <div>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
               <MessageSquare style={{ width: '16px', height: '16px' }} />
@@ -308,8 +315,7 @@ export default function SettingsPanel() {
               ))}
             </select>
           </div>
-
-          {/* Opacity */}
+ 
           <div>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
               <Eye style={{ width: '16px', height: '16px' }} />
@@ -325,7 +331,7 @@ export default function SettingsPanel() {
               style={{ width: '100%', accentColor: '#3b82f6' }}
             />
           </div>
-
+ 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db' }}>
               <Pin style={{ width: '16px', height: '16px' }} />
@@ -357,8 +363,7 @@ export default function SettingsPanel() {
               }} />
             </button>
           </div>
-
-          {/* Save */}
+ 
           <button
             onClick={handleSave}
             style={{

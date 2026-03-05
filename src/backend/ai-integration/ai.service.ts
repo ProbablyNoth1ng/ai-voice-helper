@@ -99,7 +99,7 @@ export class AIService {
       const transcription = await this.openaiClient.audio.transcriptions.create({
         file: fs.createReadStream(audioFilePath),
         model: 'whisper-1',
-        language: this.transcriptionLanguage, // ✅ Fixed: use dynamic language
+        language: this.transcriptionLanguage, 
         response_format: 'text'
       });
 
