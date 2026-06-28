@@ -12,6 +12,22 @@ let backendProcess;
 
 const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
 
+function toElectronShortcut(shortcut) {
+  return shortcut
+    .split('+')
+    .map((part) => part.trim())
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (lower === 'ctrl' || lower === 'control') return 'CommandOrControl';
+      if (lower === 'commandorcontrol') return 'CommandOrControl';
+      if (lower === 'shift') return 'Shift';
+      if (lower === 'alt' || lower === 'option') return 'Alt';
+      if (lower === 'super' || lower === 'cmd' || lower === 'command') return 'Command';
+      return part;
+    })
+    .join('+');
+}
+
 function createWindow() {
   const width = parseInt(process.env.WIDTH, 10) || 800;
   const height = parseInt(process.env.HEIGHT, 10) || 600;
@@ -110,21 +126,25 @@ function toggleWindow() {
 }
 
 function registerHotkeys() {
+  const voiceHotkey = process.env.DEFAULT_HOTKEY || 'Ctrl+Shift+Q';
+  const codingHotkey = process.env.DEFAULT_SCREEN_CAPTURE_HOTKEY || 'Ctrl+Shift+`';
+  const voiceElectronShortcut = toElectronShortcut(voiceHotkey);
+  const codingElectronShortcut = toElectronShortcut(codingHotkey);
  
-  const voiceShortcutRegistered = globalShortcut.register('CommandOrControl+Shift+Q', () => {
-    console.log('🔥 Hotkey: Ctrl+Shift+Q (toggle recording)');
+  const voiceShortcutRegistered = globalShortcut.register(voiceElectronShortcut, () => {
+    console.log(`🔥 Hotkey: ${voiceHotkey} (toggle recording)`);
     mainWindow.webContents.send('hotkey-pressed');
   });
   if (!voiceShortcutRegistered) {
-    console.error('Failed to register shortcut: CommandOrControl+Shift+Q');
+    console.error(`Failed to register shortcut: ${voiceElectronShortcut}`);
   }
 
-  const codingShortcutRegistered = globalShortcut.register('CommandOrControl+Shift+`', () => {
-    console.log('Hotkey: Ctrl+Shift+` (toggle coding task capture)');
+  const codingShortcutRegistered = globalShortcut.register(codingElectronShortcut, () => {
+    console.log(`Hotkey: ${codingHotkey} (toggle coding task capture)`);
     mainWindow.webContents.send('coding-hotkey-pressed');
   });
   if (!codingShortcutRegistered) {
-    console.error('Failed to register shortcut: CommandOrControl+Shift+`');
+    console.error(`Failed to register shortcut: ${codingElectronShortcut}`);
   }
  
   const visibilityShortcutRegistered = globalShortcut.register('CommandOrControl+Shift+H', () => {
