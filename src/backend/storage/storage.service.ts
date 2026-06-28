@@ -6,6 +6,8 @@ interface AppStorage {
   apiKey?: string;
   model?: string;
   hotkey?: string;
+  microphoneDeviceId?: string;
+  microphoneDeviceLabel?: string;
   transcriptionLanguage?: string;
   responseLanguage?: string;
   opacity?: number;
@@ -36,12 +38,26 @@ export class StorageServiceSimple {
 
   private loadData(): void {
     try {
-      this.data = this.getDefaults();
+      if (!fs.existsSync(this.storePath)) {
+        this.data = this.getDefaults();
+        this.saveData();
+        return;
+      }
+
+      const rawData = fs.readFileSync(this.storePath, 'utf8').trim();
+      if (!rawData) {
+        this.data = this.getDefaults();
+        this.saveData();
+        return;
+      }
+
+      const parsedData = JSON.parse(rawData) as Partial<AppStorage>;
+      this.data = this.mergeWithDefaults(parsedData);
       this.saveData();
-    
     } catch (error) {
       this.logger.error('Failed to load storage', error);
       this.data = this.getDefaults();
+      this.saveData();
     }
   }
 
@@ -56,7 +72,7 @@ export class StorageServiceSimple {
   private getDefaults(): AppStorage {
     return {
       model: 'gpt-4o-mini',
-      hotkey: 'Ctrl+Shift+Q',
+      hotkey: process.env.DEFAULT_HOTKEY || 'Ctrl+Shift+Q',
       transcriptionLanguage: 'en',
       responseLanguage: 'en',
       opacity: 0.9,
@@ -64,6 +80,25 @@ export class StorageServiceSimple {
       aiProvider: 'openai',      
       aiModel: 'gpt-4o-mini',      
       conversationHistory: []
+    };
+  }
+
+  private mergeWithDefaults(data: Partial<AppStorage>): AppStorage {
+    const defaults = this.getDefaults();
+
+    return {
+      ...defaults,
+      ...data,
+      hotkey: typeof data.hotkey === 'string' && data.hotkey.trim() ? data.hotkey : defaults.hotkey,
+      microphoneDeviceId:
+        typeof data.microphoneDeviceId === 'string' && data.microphoneDeviceId.trim()
+          ? data.microphoneDeviceId
+          : undefined,
+      microphoneDeviceLabel:
+        typeof data.microphoneDeviceLabel === 'string' && data.microphoneDeviceLabel.trim()
+          ? data.microphoneDeviceLabel
+          : undefined,
+      conversationHistory: Array.isArray(data.conversationHistory) ? data.conversationHistory : [],
     };
   }
 

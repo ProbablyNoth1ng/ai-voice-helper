@@ -11,10 +11,15 @@ export interface AppConfig {
   openaiKey?: string;
   model: string;
   hotkey: string;
+  microphoneHotkey?: string;
+  codingHotkey?: string;
+  microphoneCodingHotkey?: string;
   transcriptionLanguage: string;
   responseLanguage: string;
   opacity: number;
   alwaysOnTop: boolean;
+  microphoneDeviceId?: string;
+  microphoneDeviceLabel?: string;
 }
  
 export interface VoiceEventData {

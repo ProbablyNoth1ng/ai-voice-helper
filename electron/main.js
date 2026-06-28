@@ -2,7 +2,7 @@ const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, session, deskto
 const path = require('path');
 const { spawn } = require('child_process');
 const dotenv = require('dotenv');
- 
+
 const envPath = path.join(__dirname, '..', '.env');
 dotenv.config({ path: envPath });
 
@@ -32,11 +32,11 @@ function createWindow() {
   const width = parseInt(process.env.WIDTH, 10) || 800;
   const height = parseInt(process.env.HEIGHT, 10) || 600;
 
-  console.log('📐 Creating window:', width, 'x', height);
+  console.log('Creating window:', width, 'x', height);
 
   mainWindow = new BrowserWindow({
-    width: width,
-    height: height,
+    width,
+    height,
     transparent: false,
     frame: false,
     alwaysOnTop: true,
@@ -44,21 +44,21 @@ function createWindow() {
     resizable: true,
     opacity: 0.9,
     backgroundColor: '#1a1a2e',
-    show: false, 
+    show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      devTools: false
-    }
+      devTools: false,
+    },
   });
- 
+
   mainWindow.setSkipTaskbar(true);
- 
+
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     const allowedPermissions = ['media', 'microphone', 'audioCapture'];
     if (allowedPermissions.includes(permission)) {
-      console.log(`✅ Allowing permission: ${permission}`);
+      console.log(`Allowing permission: ${permission}`);
       callback(true);
     } else {
       callback(false);
@@ -66,31 +66,31 @@ function createWindow() {
   });
 
   if (isDev) {
-    console.log('📡 Loading from dev server...');
+    console.log('Loading from dev server...');
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     const frontendPath = path.join(__dirname, '../dist-frontend/index.html');
-    console.log('📦 Loading from:', frontendPath);
+    console.log('Loading from:', frontendPath);
     mainWindow.loadFile(frontendPath);
   }
- 
+
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    mainWindow.setSkipTaskbar(true); // Ensure it's still hidden after showing
+    mainWindow.setSkipTaskbar(true);
   });
 
   mainWindow.setContentProtection(true);
 
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.error('❌ Failed to load:', errorDescription);
+    console.error('Failed to load:', errorDescription);
   });
 
   mainWindow.webContents.on('console-message', (event, level, message) => {
     console.log(`[Renderer] ${message}`);
   });
 
-  console.log('✅ Window created');
+  console.log('Window created');
 }
 
 function createTray() {
@@ -99,11 +99,11 @@ function createTray() {
   try {
     if (require('fs').existsSync(iconPath)) {
       tray = new Tray(iconPath);
-      
+
       const contextMenu = Menu.buildFromTemplate([
         { label: 'Show/Hide', click: () => toggleWindow() },
         { type: 'separator' },
-        { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } }
+        { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } },
       ]);
 
       tray.setToolTip('AI Voice Assistant');
@@ -111,7 +111,7 @@ function createTray() {
       tray.on('click', () => toggleWindow());
     }
   } catch (e) {
-    console.log('⚠️ Tray creation failed:', e.message);
+    console.log('Tray creation failed:', e.message);
   }
 }
 
@@ -120,35 +120,55 @@ function toggleWindow() {
     mainWindow.hide();
   } else {
     mainWindow.show();
-    mainWindow.focus(); 
+    mainWindow.focus();
     mainWindow.setSkipTaskbar(true);
   }
 }
 
 function registerHotkeys() {
   const voiceHotkey = process.env.DEFAULT_HOTKEY || 'Ctrl+Shift+Q';
+  const microphoneHotkey = process.env.DEFAULT_MICROPHONE_HOTKEY || 'Ctrl+Shift+Alt+Q';
   const codingHotkey = process.env.DEFAULT_SCREEN_CAPTURE_HOTKEY || 'Ctrl+Shift+`';
-  const voiceElectronShortcut = toElectronShortcut(voiceHotkey);
-  const codingElectronShortcut = toElectronShortcut(codingHotkey);
- 
-  const voiceShortcutRegistered = globalShortcut.register(voiceElectronShortcut, () => {
-    console.log(`🔥 Hotkey: ${voiceHotkey} (toggle recording)`);
-    mainWindow.webContents.send('hotkey-pressed');
-  });
-  if (!voiceShortcutRegistered) {
-    console.error(`Failed to register shortcut: ${voiceElectronShortcut}`);
+  const microphoneCodingHotkey =
+    process.env.DEFAULT_MICROPHONE_SCREEN_CAPTURE_HOTKEY || 'Ctrl+Shift+Alt+`';
+
+  const registrations = [
+    {
+      shortcut: voiceHotkey,
+      channel: 'hotkey-pressed',
+      description: 'toggle interviewer recording',
+    },
+    {
+      shortcut: microphoneHotkey,
+      channel: 'microphone-hotkey-pressed',
+      description: 'toggle microphone recording',
+    },
+    {
+      shortcut: codingHotkey,
+      channel: 'coding-hotkey-pressed',
+      description: 'toggle coding task capture from interviewer audio',
+    },
+    {
+      shortcut: microphoneCodingHotkey,
+      channel: 'microphone-coding-hotkey-pressed',
+      description: 'toggle coding task capture from microphone',
+    },
+  ];
+
+  for (const registration of registrations) {
+    const electronShortcut = toElectronShortcut(registration.shortcut);
+    const registered = globalShortcut.register(electronShortcut, () => {
+      console.log(`Hotkey: ${registration.shortcut} (${registration.description})`);
+      mainWindow.webContents.send(registration.channel);
+    });
+
+    if (!registered) {
+      console.error(`Failed to register shortcut: ${electronShortcut}`);
+    }
   }
 
-  const codingShortcutRegistered = globalShortcut.register(codingElectronShortcut, () => {
-    console.log(`Hotkey: ${codingHotkey} (toggle coding task capture)`);
-    mainWindow.webContents.send('coding-hotkey-pressed');
-  });
-  if (!codingShortcutRegistered) {
-    console.error(`Failed to register shortcut: ${codingElectronShortcut}`);
-  }
- 
   const visibilityShortcutRegistered = globalShortcut.register('CommandOrControl+Shift+H', () => {
-    console.log('👁️ Hotkey: Ctrl+Shift+H (toggle visibility)');
+    console.log('Hotkey: Ctrl+Shift+H (toggle visibility)');
     toggleWindow();
   });
   if (!visibilityShortcutRegistered) {
@@ -156,16 +176,15 @@ function registerHotkeys() {
   }
 
   const settingsShortcutRegistered = globalShortcut.register('CommandOrControl+Shift+S', () => {
-    console.log('⚙️ Hotkey: Ctrl+Shift+S (toggle settings)');
+    console.log('Hotkey: Ctrl+Shift+S (toggle settings)');
     mainWindow.webContents.send('toggle-settings');
   });
   if (!settingsShortcutRegistered) {
     console.error('Failed to register shortcut: CommandOrControl+Shift+S');
   }
 
-  console.log('✅ Hotkeys registered');
+  console.log('Hotkeys registered');
 }
-
 
 async function captureCodingScreenshot() {
   if (!mainWindow) {
@@ -184,7 +203,7 @@ async function captureCodingScreenshot() {
 
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
-      thumbnailSize: { width, height }
+      thumbnailSize: { width, height },
     });
 
     const primarySource =
@@ -210,18 +229,18 @@ async function captureCodingScreenshot() {
 
 function startBackend() {
   if (isDev) {
-    console.log('📡 Dev mode: Start backend manually with "npm run dev:backend"');
+    console.log('Dev mode: Start backend manually with "npm run dev:backend"');
     return;
   }
 
   const backendPath = path.join(__dirname, '../dist/backend/main.js');
-  
-  console.log('📡 Starting backend from:', backendPath);
+
+  console.log('Starting backend from:', backendPath);
 
   try {
     backendProcess = spawn('node', [backendPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, NODE_ENV: 'production' }
+      env: { ...process.env, NODE_ENV: 'production' },
     });
 
     backendProcess.stdout.on('data', (data) => {
@@ -233,19 +252,18 @@ function startBackend() {
     });
 
     backendProcess.on('error', (err) => {
-      console.error('❌ Backend failed:', err);
+      console.error('Backend failed:', err);
     });
 
-    console.log('✅ Backend process started');
+    console.log('Backend process started');
   } catch (e) {
-    console.error('❌ Failed to start backend:', e);
+    console.error('Failed to start backend:', e);
   }
 }
 
- 
 app.whenReady().then(() => {
-  console.log('🚀 Starting AI Voice Assistant...');
-  console.log('   Mode:', isDev ? 'DEVELOPMENT' : 'PRODUCTION');
+  console.log('Starting AI Voice Assistant...');
+  console.log('Mode:', isDev ? 'DEVELOPMENT' : 'PRODUCTION');
 
   startBackend();
 
@@ -277,11 +295,10 @@ app.on('window-all-closed', () => {
   }
 });
 
- 
 ipcMain.on('hide-window', () => mainWindow.hide());
 ipcMain.on('show-window', () => {
   mainWindow.show();
-  mainWindow.setSkipTaskbar(true); // Re-ensure hidden from taskbar
+  mainWindow.setSkipTaskbar(true);
 });
 ipcMain.on('set-always-on-top', (_, value) => mainWindow.setAlwaysOnTop(value));
 ipcMain.on('set-opacity', (_, value) => mainWindow.setOpacity(value));

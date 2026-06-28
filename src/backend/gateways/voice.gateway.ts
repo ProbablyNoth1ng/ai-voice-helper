@@ -9,6 +9,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import { AIService } from '../ai-integration/ai.service';
 import { HotkeyService } from '../hotkey-listener/hotkey.service';
@@ -26,6 +27,8 @@ interface MessageBodyPayload {
   alwaysOnTop?: boolean;
   transcriptionLanguage?: string;
   responseLanguage?: string;
+  microphoneDeviceId?: string;
+  microphoneDeviceLabel?: string;
 }
 
 @WebSocketGateway(3001, {
@@ -44,6 +47,7 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     private readonly aiService: AIService,
     private readonly hotkeyService: HotkeyService,
     private readonly storageService: StorageServiceSimple,
+    private readonly configService: ConfigService,
   ) {}
 
   afterInit() {
@@ -281,6 +285,14 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, O
         this.storageService.set('hotkey', payload.hotkey);
       }
 
+      if ('microphoneDeviceId' in payload) {
+        this.storageService.set('microphoneDeviceId', payload.microphoneDeviceId?.trim() || undefined);
+      }
+
+      if ('microphoneDeviceLabel' in payload) {
+        this.storageService.set('microphoneDeviceLabel', payload.microphoneDeviceLabel?.trim() || undefined);
+      }
+
       if (payload.opacity !== undefined) {
         this.storageService.set('opacity', payload.opacity);
       }
@@ -319,15 +331,28 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, O
   }
 
   private getCurrentConfig() {
+    const hotkey = this.configService.get('DEFAULT_HOTKEY') || this.hotkeyService.getHotkeyString();
+    const microphoneHotkey =
+      this.configService.get('DEFAULT_MICROPHONE_HOTKEY') || 'Ctrl+Shift+Alt+Q';
+    const codingHotkey =
+      this.configService.get('DEFAULT_SCREEN_CAPTURE_HOTKEY') || 'Ctrl+Shift+`';
+    const microphoneCodingHotkey =
+      this.configService.get('DEFAULT_MICROPHONE_SCREEN_CAPTURE_HOTKEY') || 'Ctrl+Shift+Alt+`';
+
     return {
       transcriptionLanguage: this.storageService.get('transcriptionLanguage') || 'en',
       responseLanguage: this.storageService.get('responseLanguage') || 'en',
       model: this.storageService.get('model') || 'gpt-4o-mini',
       opacity: this.storageService.get('opacity') || 0.9,
       alwaysOnTop: this.storageService.get('alwaysOnTop') ?? true,
-      hotkey: this.storageService.get('hotkey') || 'Ctrl+Shift+Q',
+      hotkey,
+      microphoneHotkey,
+      codingHotkey,
+      microphoneCodingHotkey,
       aiProvider: this.storageService.get('aiProvider') || 'openai',
       aiModel: this.storageService.get('aiModel') || 'gpt-4o-mini',
+      microphoneDeviceId: this.storageService.get('microphoneDeviceId'),
+      microphoneDeviceLabel: this.storageService.get('microphoneDeviceLabel'),
     };
   }
 

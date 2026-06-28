@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, Save, Eye, Pin, Languages, MessageSquare, CheckCircle, Key } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { X, Save, Eye, Pin, Languages, MessageSquare, CheckCircle, Key, Mic } from 'lucide-react';
 import { useVoiceStore } from '../../store/voiceStore';
 import { io } from 'socket.io-client';
 import { AI_PROVIDERS, getModelLabel, getProviderById } from '../../constants/aiProviders';
@@ -17,6 +17,11 @@ interface WindowWithElectron extends Window {
 
 declare const window: WindowWithElectron;
 
+interface AudioInputOption {
+  deviceId: string;
+  label: string;
+}
+
 export default function SettingsPanel() {
   const { config, updateConfig, setShowSettings } = useVoiceStore();
   const [localConfig, setLocalConfig] = useState(config);
@@ -24,6 +29,8 @@ export default function SettingsPanel() {
   const [openaiKey, setOpenaiKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [claudeKey, setClaudeKey] = useState('');
+  const [microphoneOptions, setMicrophoneOptions] = useState<AudioInputOption[]>([]);
+  const [isLoadingMicrophones, setIsLoadingMicrophones] = useState(false);
 
   useEffect(() => {
     setLocalConfig(config);
@@ -33,6 +40,72 @@ export default function SettingsPanel() {
     console.log('SettingsPanel mounted');
     return () => console.log('SettingsPanel unmounted');
   }, []);
+
+  const loadMicrophoneOptions = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setMicrophoneOptions([]);
+      return;
+    }
+
+    setIsLoadingMicrophones(true);
+    let permissionStream: MediaStream | null = null;
+
+    try {
+      let devices = await navigator.mediaDevices.enumerateDevices();
+      let audioInputs = devices.filter((device) => device.kind === 'audioinput');
+
+      if (audioInputs.some((device) => !device.label)) {
+        permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        devices = await navigator.mediaDevices.enumerateDevices();
+        audioInputs = devices.filter((device) => device.kind === 'audioinput');
+      }
+
+      const nextOptions = audioInputs
+        .filter((device, index, allDevices) => allDevices.findIndex((item) => item.deviceId === device.deviceId) === index)
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          label: device.label || `Microphone ${index + 1}`,
+        }));
+
+      setMicrophoneOptions(nextOptions);
+      setLocalConfig((currentConfig) => {
+        if (!currentConfig.microphoneDeviceId) {
+          return currentConfig;
+        }
+
+        const selectedDevice = nextOptions.find((option) => option.deviceId === currentConfig.microphoneDeviceId);
+        if (!selectedDevice) {
+          return currentConfig;
+        }
+
+        return {
+          ...currentConfig,
+          microphoneDeviceLabel: selectedDevice.label,
+        };
+      });
+    } catch (error) {
+      console.error('Failed to load microphones:', error);
+      setMicrophoneOptions([]);
+    } finally {
+      permissionStream?.getTracks().forEach((track) => track.stop());
+      setIsLoadingMicrophones(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadMicrophoneOptions();
+
+    if (!navigator.mediaDevices?.addEventListener) {
+      return;
+    }
+
+    const handleDeviceChange = () => {
+      void loadMicrophoneOptions();
+    };
+
+    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+  }, [loadMicrophoneOptions]);
 
   const handleOpacityChange = (value: number) => {
     setLocalConfig({ ...localConfig, opacity: value });
@@ -57,6 +130,16 @@ export default function SettingsPanel() {
     setLocalConfig({ ...localConfig, responseLanguage: language });
   };
 
+  const handleMicrophoneChange = (deviceId: string) => {
+    const selectedDevice = microphoneOptions.find((option) => option.deviceId === deviceId);
+
+    setLocalConfig({
+      ...localConfig,
+      microphoneDeviceId: deviceId || undefined,
+      microphoneDeviceLabel: deviceId ? selectedDevice?.label : undefined,
+    });
+  };
+
   const handleAIProviderChange = (provider: string) => {
     const providerObj = getProviderById(provider);
     setLocalConfig({
@@ -76,6 +159,8 @@ export default function SettingsPanel() {
     const socket = io('http://localhost:3001');
     const payload: Record<string, unknown> = {
       ...localConfig,
+      microphoneDeviceId: localConfig.microphoneDeviceId || '',
+      microphoneDeviceLabel: localConfig.microphoneDeviceLabel || '',
     };
 
     if (openaiKey.trim()) payload.openaiKey = openaiKey.trim();
@@ -274,6 +359,43 @@ export default function SettingsPanel() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#d1d5db',
+                marginBottom: '12px',
+              }}
+            >
+              <Mic style={{ width: '16px', height: '16px' }} />
+              Microphone
+            </label>
+            <select
+              value={localConfig.microphoneDeviceId || ''}
+              onChange={(e) => handleMicrophoneChange(e.target.value)}
+              style={selectStyle}
+              disabled={isLoadingMicrophones}
+            >
+              <option value="">System default microphone</option>
+              {microphoneOptions.map((device) => (
+                <option key={device.deviceId} value={device.deviceId}>
+                  {device.label}
+                </option>
+              ))}
+            </select>
+            <p style={hintStyle}>
+              {isLoadingMicrophones
+                ? 'Loading microphone list...'
+                : localConfig.microphoneDeviceId
+                  ? `Selected: ${localConfig.microphoneDeviceLabel || 'Saved microphone'}`
+                  : 'Uses the system default microphone for the microphone hotkeys.'}
+            </p>
           </div>
 
           <div>

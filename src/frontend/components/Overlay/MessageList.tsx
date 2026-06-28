@@ -21,7 +21,7 @@ const systemCardStyle = {
 };
 
 export default function MessageList() {
-  const { messages } = useVoiceStore();
+  const { messages, config } = useVoiceStore();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export default function MessageList() {
           padding: '24px',
         }}
       >
-        Press <strong style={{ color: '#6b7280', margin: '0 4px' }}>hotkey</strong> to start recording
+        Press <strong style={{ color: '#6b7280', margin: '0 4px' }}>{config.hotkey}</strong> to start recording
       </div>
     );
   }

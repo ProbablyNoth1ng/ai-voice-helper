@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 interface HotkeyConfig {
   ctrl: boolean;
   shift: boolean;
+  alt: boolean;
   key: string;
 }
 
@@ -13,6 +14,7 @@ export class HotkeyService {
   private hotkeyConfig: HotkeyConfig = {
     ctrl: true,
     shift: true,
+    alt: true,
     key: 'Q'
   };
 
@@ -30,6 +32,7 @@ export class HotkeyService {
     this.hotkeyConfig = {
       ctrl: parts.includes('ctrl') || parts.includes('commandorcontrol'),
       shift: parts.includes('shift'),
+      alt: parts.includes('alt') || parts.includes('option'),
       key: parts[parts.length - 1].toUpperCase()
     };
 
@@ -56,6 +59,7 @@ export class HotkeyService {
     this.hotkeyConfig = {
       ctrl: parts.includes('ctrl') || parts.includes('commandorcontrol'),
       shift: parts.includes('shift'),
+      alt: parts.includes('alt') || parts.includes('option'),
       key: parts[parts.length - 1].toUpperCase()
     };
 
@@ -67,6 +71,7 @@ export class HotkeyService {
     const parts: string[] = [];
     if (this.hotkeyConfig.ctrl) parts.push('Ctrl');
     if (this.hotkeyConfig.shift) parts.push('Shift');
+    if (this.hotkeyConfig.alt) parts.push('Alt');
     parts.push(this.hotkeyConfig.key);
     return parts.join('+');
   }

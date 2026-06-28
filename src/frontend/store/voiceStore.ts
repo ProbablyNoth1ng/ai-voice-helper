@@ -13,12 +13,17 @@ interface Message {
 interface AppConfig {
   model: string;
   hotkey: string;
+  microphoneHotkey?: string;
+  codingHotkey?: string;
+  microphoneCodingHotkey?: string;
   opacity: number;
   alwaysOnTop: boolean;
   transcriptionLanguage?: string;
   responseLanguage?: string;
   aiProvider?: string;
   aiModel?: string;
+  microphoneDeviceId?: string;
+  microphoneDeviceLabel?: string;
 }
 
 interface VoiceStore {
@@ -44,6 +49,9 @@ export const useVoiceStore = create<VoiceStore>((set) => ({
   config: {
     model: 'gpt-4o-mini',
     hotkey: 'Ctrl+Shift+Q',
+    microphoneHotkey: 'Ctrl+Shift+Alt+Q',
+    codingHotkey: 'Ctrl+Shift+`',
+    microphoneCodingHotkey: 'Ctrl+Shift+Alt+`',
     opacity: 0.9,
     alwaysOnTop: true,
     transcriptionLanguage: 'en',
