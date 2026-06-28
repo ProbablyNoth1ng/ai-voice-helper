@@ -215,16 +215,27 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     @MessageBody() payload: MessageBodyPayload,
   ) {
     try {
+      const previousProvider = this.storageService.get('aiProvider') || 'openai';
+      const previousModel = this.storageService.get('aiModel') || 'gpt-4o-mini';
+      let activeProvider = previousProvider;
+      let activeModel = previousModel;
+      let modelSettingsChanged = false;
+
       if (payload.aiProvider) {
         this.aiService.updateProvider(payload.aiProvider as 'openai' | 'gemini' | 'claude');
         this.storageService.set('aiProvider', payload.aiProvider);
+        activeProvider = payload.aiProvider;
+        modelSettingsChanged = modelSettingsChanged || payload.aiProvider !== previousProvider;
         this.logger.log(`AI Provider switched to: ${payload.aiProvider}`);
       }
 
       if (payload.aiModel) {
-        const provider = payload.aiProvider ?? this.storageService.get('aiProvider') ?? 'openai';
+        const provider = payload.aiProvider ?? activeProvider;
         this.aiService.updateModels({ [provider]: payload.aiModel });
         this.storageService.set('aiModel', payload.aiModel);
+        activeProvider = provider;
+        activeModel = payload.aiModel;
+        modelSettingsChanged = modelSettingsChanged || payload.aiModel !== previousModel;
         this.logger.log(`AI Model set to: ${payload.aiModel} (provider: ${provider})`);
       }
 
@@ -280,8 +291,16 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, O
 
       client.emit('config-updated', {
         success: true,
-        activeProvider: this.aiService.getCurrentProvider(),
+        activeProvider,
+        activeModel,
       });
+
+      if (modelSettingsChanged) {
+        this.server.emit('model-switched', {
+          provider: activeProvider,
+          model: activeModel,
+        });
+      }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       client.emit('error', { message: errorMessage });

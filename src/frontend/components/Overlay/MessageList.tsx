@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { User, Bot } from 'lucide-react';
+import { User, Bot, Info } from 'lucide-react';
 import { useVoiceStore } from '../../store/voiceStore';
 
 const userCardStyle = {
@@ -13,6 +13,11 @@ const assistantCardStyle = {
   backgroundColor: 'rgba(15, 23, 42, 0.95)',
   border: '1px solid rgba(52, 211, 153, 0.24)',
   boxShadow: '0 16px 28px rgba(0, 0, 0, 0.18)',
+};
+
+const systemCardStyle = {
+  backgroundColor: 'rgba(31, 41, 55, 0.92)',
+  border: '1px solid rgba(148, 163, 184, 0.24)',
 };
 
 export default function MessageList() {
@@ -46,6 +51,7 @@ export default function MessageList() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       {messages.map((message) => {
         const isAssistant = message.type === 'assistant';
+        const isSystem = message.type === 'system';
 
         return (
           <div
@@ -55,7 +61,7 @@ export default function MessageList() {
               gap: '12px',
               padding: '14px',
               borderRadius: '12px',
-              ...(isAssistant ? assistantCardStyle : userCardStyle),
+              ...(isSystem ? systemCardStyle : isAssistant ? assistantCardStyle : userCardStyle),
             }}
           >
             <div
@@ -67,13 +73,17 @@ export default function MessageList() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: isAssistant ? '#0f766e' : '#2563eb',
-                boxShadow: isAssistant
-                  ? '0 10px 24px rgba(15, 118, 110, 0.28)'
-                  : '0 10px 24px rgba(37, 99, 235, 0.24)',
+                backgroundColor: isSystem ? '#475569' : isAssistant ? '#0f766e' : '#2563eb',
+                boxShadow: isSystem
+                  ? '0 10px 24px rgba(71, 85, 105, 0.24)'
+                  : isAssistant
+                    ? '0 10px 24px rgba(15, 118, 110, 0.28)'
+                    : '0 10px 24px rgba(37, 99, 235, 0.24)',
               }}
             >
-              {isAssistant ? (
+              {isSystem ? (
+                <Info style={{ width: '16px', height: '16px', color: 'white' }} />
+              ) : isAssistant ? (
                 <Bot style={{ width: '16px', height: '16px', color: 'white' }} />
               ) : (
                 <User style={{ width: '16px', height: '16px', color: 'white' }} />
@@ -96,10 +106,10 @@ export default function MessageList() {
                     fontWeight: 700,
                     letterSpacing: '0.04em',
                     textTransform: 'uppercase',
-                    color: isAssistant ? '#5eead4' : '#93c5fd',
+                    color: isSystem ? '#cbd5e1' : isAssistant ? '#5eead4' : '#93c5fd',
                   }}
                 >
-                  {isAssistant ? 'Answer' : 'Transcript'}
+                  {isSystem ? 'System' : isAssistant ? 'Answer' : 'Transcript'}
                 </span>
                 <span style={{ fontSize: '11px', color: '#6b7280', flexShrink: 0 }}>
                   {new Date(message.timestamp).toLocaleTimeString()}
@@ -150,7 +160,7 @@ export default function MessageList() {
                 <div
                   style={{
                     fontSize: '13px',
-                    color: '#dbeafe',
+                    color: isSystem ? '#e5e7eb' : '#dbeafe',
                     lineHeight: '1.6',
                     whiteSpace: 'pre-wrap',
                     wordWrap: 'break-word',

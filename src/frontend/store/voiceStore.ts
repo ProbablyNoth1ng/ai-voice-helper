@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 
 type AppState = 'idle' | 'listening' | 'processing';
+type MessageType = 'user' | 'assistant' | 'system';
 
 interface Message {
   id: string;
   text: string;
-  type: 'user' | 'assistant';
+  type: MessageType;
   timestamp: number;
 }
 
@@ -16,8 +17,8 @@ interface AppConfig {
   alwaysOnTop: boolean;
   transcriptionLanguage?: string;
   responseLanguage?: string;
-  aiProvider?: string;  
-  aiModel?: string;  
+  aiProvider?: string;
+  aiModel?: string;
 }
 
 interface VoiceStore {
@@ -26,18 +27,18 @@ interface VoiceStore {
   config: AppConfig;
   showSettings: boolean;
   error: string | null;
-  
+
   setState: (state: AppState) => void;
   addMessage: (message: Message) => void;
   upsertMessage: (message: Message) => void;
-  appendToMessage: (id: string, text: string, type: 'user' | 'assistant') => void;
+  appendToMessage: (id: string, text: string, type: MessageType) => void;
   clearMessages: () => void;
   updateConfig: (config: Partial<AppConfig>) => void;
   setShowSettings: (show: boolean) => void;
   setError: (error: string | null) => void;
 }
 
-export const useVoiceStore = create<VoiceStore>((set, get) => ({
+export const useVoiceStore = create<VoiceStore>((set) => ({
   state: 'idle',
   messages: [],
   config: {
@@ -48,18 +49,17 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     transcriptionLanguage: 'en',
     responseLanguage: 'en',
     aiProvider: 'openai',
-    aiModel: 'gpt-4o-mini' 
+    aiModel: 'gpt-4o-mini',
   },
   showSettings: false,
   error: null,
 
   setState: (state) => {
-    console.log('📦 Store: setState ->', state);
+    console.log('Store setState ->', state);
     set({ state });
   },
-  
-  addMessage: (message) => 
-    set((s) => ({ messages: [...s.messages, message] })),
+
+  addMessage: (message) => set((s) => ({ messages: [...s.messages, message] })),
 
   upsertMessage: (message) =>
     set((s) => {
@@ -97,20 +97,20 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       };
       return { messages };
     }),
-  
+
   clearMessages: () => set({ messages: [] }),
-  
+
   updateConfig: (newConfig) => {
-      console.log('📦 Store: updateConfig ->', newConfig);
-      set((s) => ({ 
-        config: { ...s.config, ...newConfig } 
-      }));
-    },
+    console.log('Store updateConfig ->', newConfig);
+    set((s) => ({
+      config: { ...s.config, ...newConfig },
+    }));
+  },
 
   setShowSettings: (show) => {
-    console.log('📦 Store: setShowSettings ->', show);
+    console.log('Store setShowSettings ->', show);
     set({ showSettings: show });
   },
-  
-  setError: (error) => set({ error })
+
+  setError: (error) => set({ error }),
 }));

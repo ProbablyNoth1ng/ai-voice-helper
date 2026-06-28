@@ -13,6 +13,7 @@ export const SOCKET_EVENTS = {
   AI_RESPONSE: 'ai-response',
   ERROR: 'error',
   CONFIG_UPDATED: 'config-updated',
+  MODEL_SWITCHED: 'model-switched',
   HOTKEY_PRESSED: 'hotkey-pressed',
   CODING_HOTKEY_PRESSED: 'coding-hotkey-pressed',
   CONNECT: 'connect',

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useVoiceStore } from '../store/voiceStore';
+import { getModelLabel } from '../constants/aiProviders';
 
 type CaptureMode = 'voice' | 'coding';
 type RecordingSource = 'virtual' | 'microphone';
@@ -326,6 +327,17 @@ export const useSocket = () => {
 
     socket.on('current-config', (config: any) => {
       updateConfig(config);
+    });
+
+    socket.on('model-switched', ({ provider, model }: { provider: string; model: string }) => {
+      const providerName = provider === 'openai' ? 'OpenAI' : provider;
+      const modelLabel = getModelLabel(provider, model);
+      addMessage({
+        id: `system-${Date.now()}`,
+        text: `Switched ${providerName} model to ${modelLabel} (${model}).`,
+        type: 'system',
+        timestamp: Date.now(),
+      });
     });
 
     socket.on('connect_error', (error: Error) => {

@@ -3,7 +3,7 @@ export type AppState = 'idle' | 'listening' | 'processing';
 export interface Message {
   id: string;
   text: string;
-  type: 'user' | 'assistant';
+  type: 'user' | 'assistant' | 'system';
   timestamp: number;
 }
 

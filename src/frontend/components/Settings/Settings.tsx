@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Save, Eye, Pin, Languages, MessageSquare, CheckCircle, Key } from 'lucide-react';
 import { useVoiceStore } from '../../store/voiceStore';
 import { io } from 'socket.io-client';
+import { AI_PROVIDERS, getModelLabel, getProviderById } from '../../constants/aiProviders';
 
 interface ElectronAPI {
   setOpacity: (value: number) => void;
@@ -20,8 +21,6 @@ export default function SettingsPanel() {
   const { config, updateConfig, setShowSettings } = useVoiceStore();
   const [localConfig, setLocalConfig] = useState(config);
   const [saved, setSaved] = useState(false);
-
-  // ✅ Per-provider API key fields (not stored in main config, sent on save only)
   const [openaiKey, setOpenaiKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [claudeKey, setClaudeKey] = useState('');
@@ -31,8 +30,8 @@ export default function SettingsPanel() {
   }, [config]);
 
   useEffect(() => {
-    console.log('⚙️ SettingsPanel mounted');
-    return () => console.log('⚙️ SettingsPanel unmounted');
+    console.log('SettingsPanel mounted');
+    return () => console.log('SettingsPanel unmounted');
   }, []);
 
   const handleOpacityChange = (value: number) => {
@@ -59,13 +58,11 @@ export default function SettingsPanel() {
   };
 
   const handleAIProviderChange = (provider: string) => {
-    console.log('🤖 AI Provider changed to:', provider);
-    // ✅ Reset aiModel to the first model of the new provider
-    const providerObj = aiProviders.find(p => p.id === provider);
+    const providerObj = getProviderById(provider);
     setLocalConfig({
       ...localConfig,
       aiProvider: provider,
-      aiModel: providerObj?.models[0] ?? localConfig.aiModel,
+      aiModel: providerObj?.models[0]?.value ?? localConfig.aiModel,
     });
   };
 
@@ -74,25 +71,27 @@ export default function SettingsPanel() {
   };
 
   const handleSave = () => {
-    console.log('💾 Saving config:', localConfig);
     updateConfig(localConfig);
-    
+
     const socket = io('http://localhost:3001');
- 
     const payload: Record<string, unknown> = {
       ...localConfig,
     };
+
     if (openaiKey.trim()) payload.openaiKey = openaiKey.trim();
     if (geminiKey.trim()) payload.geminiKey = geminiKey.trim();
     if (claudeKey.trim()) payload.claudeKey = claudeKey.trim();
 
     socket.emit('update-config', payload);
-    
-    socket.on('config-updated', (data: { success: boolean; activeProvider: string }) => {
-      console.log('✅ Config updated on backend. Active provider:', data.activeProvider);
+
+    socket.on('config-updated', (data: { success: boolean; activeProvider: string; activeModel: string }) => {
+      updateConfig({
+        aiProvider: data.activeProvider,
+        aiModel: data.activeModel,
+      });
       socket.close();
     });
-  
+
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -102,19 +101,16 @@ export default function SettingsPanel() {
   };
 
   const languageOptions = [
-    { code: 'en', label: '🇬🇧 English', name: 'English' },
-    { code: 'ru', label: '🇷🇺 Русский', name: 'Russian' },
-    { code: 'uk', label: '🇺🇦 Українська', name: 'Ukrainian' }
+    { code: 'en', label: 'English', name: 'English' },
+    { code: 'ru', label: 'Russian', name: 'Russian' },
+    { code: 'uk', label: 'Ukrainian', name: 'Ukrainian' },
   ];
 
-  const aiProviders = [
-    { id: 'openai', name: 'OpenAI (ChatGPT)', icon: '🤖', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'], keyLabel: 'OpenAI API Key', keyPlaceholder: 'sk-...' },
-    { id: 'gemini', name: 'Google Gemini', icon: '✨', models: ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro'], keyLabel: 'Gemini API Key', keyPlaceholder: 'AIza...' },
-    { id: 'claude', name: 'Anthropic Claude', icon: '🧠', models: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307', 'claude-3-opus-20240229'], keyLabel: 'Claude API Key', keyPlaceholder: 'sk-ant-...' }
-  ];
+  const currentProvider = getProviderById(localConfig.aiProvider || 'openai');
+  const activeProvider = localConfig.aiProvider || 'openai';
+  const activeModelValue = localConfig.aiModel || currentProvider?.models[0]?.value || '';
+  const activeModelLabel = getModelLabel(activeProvider, activeModelValue);
 
-  const currentProvider = aiProviders.find(p => p.id === (localConfig.aiProvider || 'openai'));
- 
   const keyValueMap: Record<string, string> = {
     openai: openaiKey,
     gemini: geminiKey,
@@ -127,10 +123,8 @@ export default function SettingsPanel() {
     claude: setClaudeKey,
   };
 
-  const activeProvider = localConfig.aiProvider || 'openai';
-
   return (
-    <div 
+    <div
       style={{
         position: 'fixed',
         top: 0,
@@ -142,14 +136,13 @@ export default function SettingsPanel() {
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        // @ts-ignore
-        WebkitAppRegion: 'no-drag'
+        WebkitAppRegion: 'no-drag',
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
-      <div 
+      <div
         style={{
           position: 'relative',
           backgroundColor: '#111827',
@@ -157,28 +150,26 @@ export default function SettingsPanel() {
           border: '1px solid #374151',
           width: '400px',
           maxHeight: '85vh',
-          overflow: 'visible', 
+          overflow: 'visible',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
           zIndex: 1000000,
-          // @ts-ignore
-          WebkitAppRegion: 'no-drag'
+          WebkitAppRegion: 'no-drag',
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div style={{
-          backgroundColor: '#1f2937',
-          borderBottom: '1px solid #374151',
-          padding: '16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: 'white', margin: 0 }}>
-            Settings
-          </h2>
+        <div
+          style={{
+            backgroundColor: '#1f2937',
+            borderBottom: '1px solid #374151',
+            padding: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: 'white', margin: 0 }}>Settings</h2>
           <button
             onClick={handleClose}
             style={{
@@ -191,87 +182,118 @@ export default function SettingsPanel() {
               alignItems: 'center',
               justifyContent: 'center',
             }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#374151'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#374151')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             <X style={{ width: '20px', height: '20px', color: '#9ca3af' }} />
           </button>
         </div>
- 
-        <div className="custom-scrollbar" style={{
-          padding: '24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '24px',
-          maxHeight: 'calc(85vh - 72px)',
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          borderRadius: '0 0 16px 16px',
-          // @ts-ignore
-          WebkitAppRegion: 'no-drag'
-        }}>
- 
-          <div style={{
-            backgroundColor: '#1e3a8a',
-            border: '1px solid #3b82f6',
-            borderRadius: '8px',
-            padding: '12px',
+
+        <div
+          className="custom-scrollbar"
+          style={{
+            padding: '24px',
             display: 'flex',
-            gap: '8px'
-          }}>
+            flexDirection: 'column',
+            gap: '24px',
+            maxHeight: 'calc(85vh - 72px)',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            borderRadius: '0 0 16px 16px',
+            WebkitAppRegion: 'no-drag',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#1e3a8a',
+              border: '1px solid #3b82f6',
+              borderRadius: '8px',
+              padding: '12px',
+              display: 'flex',
+              gap: '8px',
+            }}
+          >
             <CheckCircle style={{ width: '20px', height: '20px', color: '#60a5fa', flexShrink: 0 }} />
             <div style={{ fontSize: '13px', color: '#bfdbfe', lineHeight: '1.5' }}>
-              <strong>Active:</strong> {currentProvider?.icon} {currentProvider?.name} — {localConfig.aiModel || currentProvider?.models[0]}
+              <strong>Active:</strong> {currentProvider?.icon} {currentProvider?.name} - {activeModelLabel}
             </div>
           </div>
- 
+
           <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
-              <span style={{ fontSize: '18px' }}>🤖</span>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#d1d5db',
+                marginBottom: '12px',
+              }}
+            >
+              <span style={{ fontSize: '18px' }}>AI</span>
               AI Provider
             </label>
             <select
-              value={localConfig.aiProvider || 'openai'}
+              value={activeProvider}
               onChange={(e) => handleAIProviderChange(e.target.value)}
               style={selectStyle}
             >
-              {aiProviders.map((provider) => (
+              {AI_PROVIDERS.map((provider) => (
                 <option key={provider.id} value={provider.id}>
                   {provider.icon} {provider.name}
                 </option>
               ))}
             </select>
             <p style={hintStyle}>
-              {activeProvider === 'openai' && '🤖 ChatGPT — Most popular, reliable'}
-              {activeProvider === 'gemini' && '✨ Gemini — Fast, low cost'}
-              {activeProvider === 'claude' && '🧠 Claude — Best for complex reasoning'}
+              {activeProvider === 'openai' && 'ChatGPT - popular and reliable'}
+              {activeProvider === 'gemini' && 'Gemini - fast and cheaper'}
+              {activeProvider === 'claude' && 'Claude - strong reasoning'}
             </p>
           </div>
- 
+
           <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
-              <span style={{ fontSize: '18px' }}>🎯</span>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#d1d5db',
+                marginBottom: '12px',
+              }}
+            >
+              <span style={{ fontSize: '18px' }}>Model</span>
               AI Model
             </label>
-            <select
-              value={localConfig.aiModel || currentProvider?.models[0]}
-              onChange={(e) => handleAIModelChange(e.target.value)}
-              style={selectStyle}
-            >
+            <select value={activeModelValue} onChange={(e) => handleAIModelChange(e.target.value)} style={selectStyle}>
               {currentProvider?.models.map((model) => (
-                <option key={model} value={model}>{model}</option>
+                <option key={model.value} value={model.value}>
+                  {model.label}
+                </option>
               ))}
             </select>
           </div>
- 
+
           <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#d1d5db',
+                marginBottom: '12px',
+              }}
+            >
               <Key style={{ width: '16px', height: '16px' }} />
               {currentProvider?.keyLabel}
             </label>
             <input
               type="password"
-              placeholder={`Enter ${currentProvider?.keyPlaceholder} — leave blank to keep existing`}
+              placeholder={`Enter ${currentProvider?.keyPlaceholder} - leave blank to keep existing`}
               value={keyValueMap[activeProvider] || ''}
               onChange={(e) => keySetterMap[activeProvider]?.(e.target.value)}
               style={{
@@ -279,13 +301,21 @@ export default function SettingsPanel() {
                 fontFamily: 'monospace',
               }}
             />
-            <p style={hintStyle}>
-              🔑 Only fill this if you want to update the key. Leave blank to keep current.
-            </p>
+            <p style={hintStyle}>Only fill this if you want to update the key. Leave blank to keep current.</p>
           </div>
- 
+
           <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#d1d5db',
+                marginBottom: '12px',
+              }}
+            >
               <Languages style={{ width: '16px', height: '16px' }} />
               Transcription Language
             </label>
@@ -295,13 +325,25 @@ export default function SettingsPanel() {
               style={selectStyle}
             >
               {languageOptions.map((lang) => (
-                <option key={lang.code} value={lang.code}>{lang.label}</option>
+                <option key={lang.code} value={lang.code}>
+                  {lang.label}
+                </option>
               ))}
             </select>
           </div>
- 
+
           <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#d1d5db',
+                marginBottom: '12px',
+              }}
+            >
               <MessageSquare style={{ width: '16px', height: '16px' }} />
               Response Language
             </label>
@@ -311,13 +353,25 @@ export default function SettingsPanel() {
               style={selectStyle}
             >
               {languageOptions.map((lang) => (
-                <option key={lang.code} value={lang.code}>{lang.label}</option>
+                <option key={lang.code} value={lang.code}>
+                  {lang.label}
+                </option>
               ))}
             </select>
           </div>
- 
+
           <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '12px' }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#d1d5db',
+                marginBottom: '12px',
+              }}
+            >
               <Eye style={{ width: '16px', height: '16px' }} />
               Opacity: {Math.round(localConfig.opacity * 100)}%
             </label>
@@ -331,9 +385,18 @@ export default function SettingsPanel() {
               style={{ width: '100%', accentColor: '#3b82f6' }}
             />
           </div>
- 
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#d1d5db' }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#d1d5db',
+              }}
+            >
               <Pin style={{ width: '16px', height: '16px' }} />
               Always on Top
             </label>
@@ -349,21 +412,23 @@ export default function SettingsPanel() {
                 backgroundColor: localConfig.alwaysOnTop ? '#2563eb' : '#374151',
                 border: 'none',
                 cursor: 'pointer',
-                transition: 'background-color 0.2s'
+                transition: 'background-color 0.2s',
               }}
             >
-              <span style={{
-                display: 'inline-block',
-                height: '16px',
-                width: '16px',
-                borderRadius: '9999px',
-                backgroundColor: 'white',
-                transform: localConfig.alwaysOnTop ? 'translateX(24px)' : 'translateX(4px)',
-                transition: 'transform 0.2s'
-              }} />
+              <span
+                style={{
+                  display: 'inline-block',
+                  height: '16px',
+                  width: '16px',
+                  borderRadius: '9999px',
+                  backgroundColor: 'white',
+                  transform: localConfig.alwaysOnTop ? 'translateX(24px)' : 'translateX(4px)',
+                  transition: 'transform 0.2s',
+                }}
+              />
             </button>
           </div>
- 
+
           <button
             onClick={handleSave}
             style={{
@@ -379,15 +444,25 @@ export default function SettingsPanel() {
               color: 'white',
               border: 'none',
               cursor: 'pointer',
-              transition: 'background-color 0.2s'
+              transition: 'background-color 0.2s',
             }}
-            onMouseEnter={(e) => { if (!saved) e.currentTarget.style.backgroundColor = '#1d4ed8'; }}
-            onMouseLeave={(e) => { if (!saved) e.currentTarget.style.backgroundColor = '#2563eb'; }}
+            onMouseEnter={(e) => {
+              if (!saved) e.currentTarget.style.backgroundColor = '#1d4ed8';
+            }}
+            onMouseLeave={(e) => {
+              if (!saved) e.currentTarget.style.backgroundColor = '#2563eb';
+            }}
           >
             {saved ? (
-              <><CheckCircle style={{ width: '16px', height: '16px' }} /> Saved!</>
+              <>
+                <CheckCircle style={{ width: '16px', height: '16px' }} />
+                Saved!
+              </>
             ) : (
-              <><Save style={{ width: '16px', height: '16px' }} /> Save Settings</>
+              <>
+                <Save style={{ width: '16px', height: '16px' }} />
+                Save Settings
+              </>
             )}
           </button>
         </div>
