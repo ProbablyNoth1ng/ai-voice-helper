@@ -7,6 +7,15 @@ import * as fs from 'fs';
 
 type AIProvider = 'openai' | 'gemini' | 'claude';
 
+interface ImagePayload {
+  mimeType: string;
+  data: string;
+  dataUrl: string;
+}
+
+const CODING_TASK_PROMPT =
+  'Help solve this live coding task. Use the screenshot and spoken clarification. Be concise: approach, edge cases, code.';
+
 @Injectable()
 export class AIService {
   private readonly logger = new Logger(AIService.name);
@@ -133,6 +142,30 @@ export class AIService {
     }
   }
 
+  async getCodingTaskCompletion(transcript: string, screenshot: string): Promise<string> {
+    try {
+      this.logger.log(`Getting coding task completion from ${this.currentProvider}...`);
+
+      const image = this.parseImagePayload(screenshot);
+      const prompt = this.buildCodingTaskPrompt(transcript);
+
+      switch (this.currentProvider) {
+        case 'openai':
+          return await this.getOpenAIVisionCompletion(prompt, image);
+        case 'gemini':
+          return await this.getGeminiVisionCompletion(prompt, image);
+        case 'claude':
+          return await this.getClaudeVisionCompletion(prompt, image);
+        default:
+          throw new Error(`Unknown AI provider: ${this.currentProvider}`);
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Coding task AI API error (${this.currentProvider}):`, errorMessage);
+      throw new Error(`Failed to get coding task response from ${this.currentProvider}: ` + errorMessage);
+    }
+  }
+
   private async getOpenAICompletion(prompt: string): Promise<string> {
     const completion = await this.openaiClient.chat.completions.create({
       model: this.openaiModel,
@@ -148,6 +181,35 @@ export class AIService {
       ],
       max_tokens: 500,
       temperature: 0.7
+    });
+
+    return completion.choices[0]?.message?.content || 'No response generated.';
+  }
+
+  private async getOpenAIVisionCompletion(prompt: string, image: ImagePayload): Promise<string> {
+    const completion = await this.openaiClient.chat.completions.create({
+      model: this.openaiModel,
+      messages: [
+        {
+          role: 'system',
+          content: process.env.SYSTEM_PROMPT || 'You are a helpful AI interview assistant.'
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            {
+              type: 'image_url',
+              image_url: {
+                url: image.dataUrl,
+                detail: 'high'
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 1200,
+      temperature: 0.4
     });
 
     return completion.choices[0]?.message?.content || 'No response generated.';
@@ -170,6 +232,34 @@ export class AIService {
     const fullPrompt = `${systemPrompt}\n\nUser: ${prompt}`;
 
     const result = await model.generateContent(fullPrompt);
+    const response = result.response;
+    return response.text() || 'No response generated.';
+  }
+
+  private async getGeminiVisionCompletion(prompt: string, image: ImagePayload): Promise<string> {
+    if (!this.geminiClient) {
+      throw new Error('Gemini API key not configured');
+    }
+
+    const model = this.geminiClient.getGenerativeModel({
+      model: this.geminiModel,
+      generationConfig: {
+        maxOutputTokens: 1200,
+        temperature: 0.4,
+      }
+    });
+
+    const systemPrompt = process.env.SYSTEM_PROMPT || 'You are a helpful AI interview assistant.';
+    const result = await (model as any).generateContent([
+      { text: `${systemPrompt}\n\n${prompt}` },
+      {
+        inlineData: {
+          mimeType: image.mimeType,
+          data: image.data
+        }
+      }
+    ]);
+
     const response = result.response;
     return response.text() || 'No response generated.';
   }
@@ -198,6 +288,72 @@ export class AIService {
     }
     
     return 'No response generated.';
+  }
+
+  private async getClaudeVisionCompletion(prompt: string, image: ImagePayload): Promise<string> {
+    if (!this.claudeClient) {
+      throw new Error('Claude API key not configured');
+    }
+
+    const message = await this.claudeClient.messages.create({
+      model: this.claudeModel,
+      max_tokens: 1200,
+      temperature: 0.4,
+      system: process.env.SYSTEM_PROMPT || 'You are a helpful AI interview assistant.',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: prompt
+            },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: image.mimeType,
+                data: image.data
+              }
+            }
+          ] as any
+        }
+      ]
+    });
+
+    const textParts = message.content
+      .filter((content) => content.type === 'text')
+      .map((content) => (content.type === 'text' ? content.text : ''));
+
+    return textParts.join('\n').trim() || 'No response generated.';
+  }
+
+  private buildCodingTaskPrompt(transcript: string): string {
+    return [
+      CODING_TASK_PROMPT,
+      `Answer language: ${this.responseLanguage}.`,
+      '',
+      'Spoken clarification transcript:',
+      transcript
+    ].join('\n');
+  }
+
+  private parseImagePayload(screenshot: string): ImagePayload {
+    const match = screenshot.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+
+    if (match) {
+      return {
+        mimeType: match[1],
+        data: match[2],
+        dataUrl: screenshot
+      };
+    }
+
+    return {
+      mimeType: 'image/png',
+      data: screenshot,
+      dataUrl: `data:image/png;base64,${screenshot}`
+    };
   }
 
   getCurrentProvider(): AIProvider {

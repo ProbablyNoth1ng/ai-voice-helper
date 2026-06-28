@@ -34,7 +34,7 @@ interface MessageBodyPayload {
 @WebSocketGateway(3001, { 
   cors: { origin: '*' },
   transports: ['websocket', 'polling'],
-  maxHttpBufferSize: 15e6 
+  maxHttpBufferSize: 30e6
 })
 export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
   @WebSocketServer()
@@ -156,6 +156,66 @@ export class VoiceGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       client.emit('error', { message: errorMessage });
       client.emit('state-change', { state: 'idle' });
     } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  @SubscribeMessage('process-coding-task')
+  async handleProcessCodingTask(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { audio: string; screenshot: string }
+  ) {
+    if (this.isProcessing) {
+      this.logger.warn('Already processing');
+      return;
+    }
+
+    if (!payload?.audio || !payload?.screenshot) {
+      client.emit('error', { message: 'Missing audio or screenshot' });
+      return;
+    }
+
+    this.isProcessing = true;
+    let tempPath: string | null = null;
+
+    try {
+      const currentResponseLang = this.storageService.get('responseLanguage') || 'en';
+      const currentProvider = this.aiService.getCurrentProvider();
+      this.logger.log(`Received coding task capture (Provider: ${currentProvider}, Lang: ${currentResponseLang})`);
+      client.emit('state-change', { state: 'processing' });
+
+      const audioBuffer = Buffer.from(payload.audio, 'base64');
+      this.logger.log(`Coding task audio size: ${audioBuffer.length} bytes`);
+
+      tempPath = path.join(os.tmpdir(), `coding-audio-${Date.now()}.webm`);
+      fs.writeFileSync(tempPath, audioBuffer);
+
+      const transcript = await this.aiService.transcribeAudio(tempPath);
+      this.logger.log(`Coding task transcript: ${transcript}`);
+
+      if (!transcript || transcript.trim().length === 0) {
+        throw new Error('No speech detected');
+      }
+
+      client.emit('transcript', { text: transcript });
+
+      const response = await this.aiService.getCodingTaskCompletion(transcript, payload.screenshot);
+      this.logger.log(`Coding task AI Response (${currentProvider}): ${response.substring(0, 100)}...`);
+
+      this.storageService.addToHistory(`[Coding task]\n${transcript}`, response);
+
+      client.emit('ai-response', { text: response, language: currentResponseLang });
+      client.emit('state-change', { state: 'idle' });
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Coding task error: ${errorMessage}`);
+      client.emit('error', { message: errorMessage });
+      client.emit('state-change', { state: 'idle' });
+    } finally {
+      if (tempPath && fs.existsSync(tempPath)) {
+        fs.unlinkSync(tempPath);
+      }
       this.isProcessing = false;
     }
   }

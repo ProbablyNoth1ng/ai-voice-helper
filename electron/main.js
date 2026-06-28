@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, session } = require('electron');
+const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, session, desktopCapturer, screen } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const dotenv = require('dotenv');
@@ -111,24 +111,78 @@ function toggleWindow() {
 
 function registerHotkeys() {
  
-  globalShortcut.register('CommandOrControl+Shift+Q', () => {
+  const voiceShortcutRegistered = globalShortcut.register('CommandOrControl+Shift+Q', () => {
     console.log('🔥 Hotkey: Ctrl+Shift+Q (toggle recording)');
     mainWindow.webContents.send('hotkey-pressed');
   });
+  if (!voiceShortcutRegistered) {
+    console.error('Failed to register shortcut: CommandOrControl+Shift+Q');
+  }
+
+  const codingShortcutRegistered = globalShortcut.register('CommandOrControl+Shift+`', () => {
+    console.log('Hotkey: Ctrl+Shift+` (toggle coding task capture)');
+    mainWindow.webContents.send('coding-hotkey-pressed');
+  });
+  if (!codingShortcutRegistered) {
+    console.error('Failed to register shortcut: CommandOrControl+Shift+`');
+  }
  
-  globalShortcut.register('CommandOrControl+Shift+H', () => {
+  const visibilityShortcutRegistered = globalShortcut.register('CommandOrControl+Shift+H', () => {
     console.log('👁️ Hotkey: Ctrl+Shift+H (toggle visibility)');
     toggleWindow();
   });
+  if (!visibilityShortcutRegistered) {
+    console.error('Failed to register shortcut: CommandOrControl+Shift+H');
+  }
 
-  globalShortcut.register('CommandOrControl+Shift+S', () => {
+  const settingsShortcutRegistered = globalShortcut.register('CommandOrControl+Shift+S', () => {
     console.log('⚙️ Hotkey: Ctrl+Shift+S (toggle settings)');
     mainWindow.webContents.send('toggle-settings');
   });
+  if (!settingsShortcutRegistered) {
+    console.error('Failed to register shortcut: CommandOrControl+Shift+S');
+  }
 
   console.log('✅ Hotkeys registered');
 }
 
+
+async function captureCodingScreenshot() {
+  if (!mainWindow) {
+    throw new Error('Main window is not ready');
+  }
+
+  const wasVisible = mainWindow.isVisible();
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.size;
+
+  try {
+    if (wasVisible) {
+      mainWindow.hide();
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width, height }
+    });
+
+    const primarySource =
+      sources.find((source) => source.display_id === String(primaryDisplay.id)) ||
+      sources[0];
+
+    if (!primarySource || primarySource.thumbnail.isEmpty()) {
+      throw new Error('Unable to capture primary screen');
+    }
+
+    return primarySource.thumbnail.toDataURL();
+  } finally {
+    if (wasVisible) {
+      mainWindow.show();
+      mainWindow.setSkipTaskbar(true);
+    }
+  }
+}
 
 function startBackend() {
   if (isDev) {
@@ -207,3 +261,4 @@ ipcMain.on('show-window', () => {
 });
 ipcMain.on('set-always-on-top', (_, value) => mainWindow.setAlwaysOnTop(value));
 ipcMain.on('set-opacity', (_, value) => mainWindow.setOpacity(value));
+ipcMain.handle('capture-coding-screenshot', () => captureCodingScreenshot());
