@@ -29,6 +29,8 @@ interface VoiceStore {
   
   setState: (state: AppState) => void;
   addMessage: (message: Message) => void;
+  upsertMessage: (message: Message) => void;
+  appendToMessage: (id: string, text: string, type: 'user' | 'assistant') => void;
   clearMessages: () => void;
   updateConfig: (config: Partial<AppConfig>) => void;
   setShowSettings: (show: boolean) => void;
@@ -58,6 +60,43 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   
   addMessage: (message) => 
     set((s) => ({ messages: [...s.messages, message] })),
+
+  upsertMessage: (message) =>
+    set((s) => {
+      const existingIndex = s.messages.findIndex((item) => item.id === message.id);
+      if (existingIndex === -1) {
+        return { messages: [...s.messages, message] };
+      }
+
+      const messages = [...s.messages];
+      messages[existingIndex] = { ...messages[existingIndex], ...message };
+      return { messages };
+    }),
+
+  appendToMessage: (id, text, type) =>
+    set((s) => {
+      const existingIndex = s.messages.findIndex((item) => item.id === id);
+      if (existingIndex === -1) {
+        return {
+          messages: [
+            ...s.messages,
+            {
+              id,
+              text,
+              type,
+              timestamp: Date.now(),
+            },
+          ],
+        };
+      }
+
+      const messages = [...s.messages];
+      messages[existingIndex] = {
+        ...messages[existingIndex],
+        text: messages[existingIndex].text + text,
+      };
+      return { messages };
+    }),
   
   clearMessages: () => set({ messages: [] }),
   

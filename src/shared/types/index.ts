@@ -19,13 +19,15 @@ export interface AppConfig {
  
 export interface VoiceEventData {
   transcript?: string;
+  transcriptChunk?: string;
   response?: string;
+  responseChunk?: string;
   error?: string;
   state?: AppState;
 }
 
 export interface VoiceEvent {
-  type: 'start' | 'stop' | 'transcript' | 'response' | 'error';
+  type: 'start' | 'stop' | 'transcript' | 'transcript-chunk' | 'response' | 'response-chunk' | 'error';
   data?: VoiceEventData;
 }
  

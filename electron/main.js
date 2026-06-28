@@ -195,7 +195,11 @@ async function captureCodingScreenshot() {
       throw new Error('Unable to capture primary screen');
     }
 
-    return primarySource.thumbnail.toDataURL();
+    const pngBuffer = primarySource.thumbnail.toPNG();
+    console.log(
+      `[Screenshot] Captured coding screenshot ${width}x${height}, ${Math.round(pngBuffer.length / 1024)} KB`,
+    );
+    return `data:image/png;base64,${pngBuffer.toString('base64')}`;
   } finally {
     if (wasVisible) {
       mainWindow.show();

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useVoiceStore } from '../store/voiceStore';
 
@@ -28,38 +28,36 @@ const isElectron = !!window.electronAPI;
 
 let electronListenersRegistered = false;
 
-const readBlobAsBase64 = (blob: Blob): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result;
-      if (typeof result !== 'string') {
-        reject(new Error('Failed to read audio'));
-        return;
-      }
-      resolve(result.split(',')[1]);
-    };
-    reader.onerror = () => reject(new Error('Failed to read audio'));
-    reader.readAsDataURL(blob);
-  });
-
 export const useSocket = () => {
   const socketRef = useRef<Socket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const activeCaptureModeRef = useRef<CaptureMode | null>(null);
-  const codingScreenshotRef = useRef<string | null>(null);
+  const activeTranscriptMessageIdRef = useRef<string | null>(null);
+  const activeAssistantMessageIdRef = useRef<string | null>(null);
   const recordingPromiseRef = useRef<{
     resolve: (blob: Blob) => void;
     reject: (error: Error) => void;
   } | null>(null);
 
-  const { setState, addMessage, setError, setShowSettings, updateConfig } = useVoiceStore();
+  const {
+    setState,
+    addMessage,
+    appendToMessage,
+    upsertMessage,
+    setError,
+    setShowSettings,
+    updateConfig,
+  } = useVoiceStore();
+
+  const resetStreamingMessageRefs = useCallback(() => {
+    activeTranscriptMessageIdRef.current = null;
+    activeAssistantMessageIdRef.current = null;
+  }, []);
 
   const startRecording = useCallback((source: RecordingSource): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       console.log(`Starting ${source} audio recording...`);
-
       recordingPromiseRef.current = { resolve, reject };
 
       const getStream =
@@ -118,17 +116,13 @@ export const useSocket = () => {
 
           mediaRecorder.ondataavailable = (event: BlobEvent) => {
             if (event.data.size > 0) {
-              console.log('Audio chunk received:', event.data.size, 'bytes');
               audioChunksRef.current.push(event.data);
             }
           };
 
           mediaRecorder.onstop = () => {
-            console.log('Recording stopped');
             stream.getTracks().forEach((track) => track.stop());
-
             const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-            console.log('Final audio blob size:', audioBlob.size, 'bytes');
 
             if (recordingPromiseRef.current) {
               recordingPromiseRef.current.resolve(audioBlob);
@@ -167,7 +161,6 @@ export const useSocket = () => {
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      console.log('Stopping recording...');
       mediaRecorderRef.current.stop();
     }
   }, []);
@@ -187,20 +180,18 @@ export const useSocket = () => {
         return;
       }
 
-      console.log('Sending audio to backend:', audioBlob.size, 'bytes');
       setState('processing');
 
       try {
-        const base64Audio = await readBlobAsBase64(audioBlob);
-        console.log('Base64 audio length:', base64Audio.length);
-        socket.emit('process-audio', { audio: base64Audio });
+        const audioBuffer = await audioBlob.arrayBuffer();
+        socket.emit('process-audio', { audio: audioBuffer });
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to read audio';
         setError(errorMessage);
         setState('idle');
       }
     },
-    [setState, setError],
+    [setError, setState],
   );
 
   const sendCodingTaskToBackend = useCallback(
@@ -224,26 +215,23 @@ export const useSocket = () => {
         return;
       }
 
-      console.log('Sending coding task to backend:', audioBlob.size, 'bytes');
       setState('processing');
 
       try {
-        const base64Audio = await readBlobAsBase64(audioBlob);
-        socket.emit('process-coding-task', { audio: base64Audio, screenshot });
+        const audioBuffer = await audioBlob.arrayBuffer();
+        socket.emit('process-coding-task', { audio: audioBuffer, screenshot });
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to read audio';
         setError(errorMessage);
         setState('idle');
       }
     },
-    [setState, setError],
+    [setError, setState],
   );
 
   const handleHotkeyPress = useCallback(async () => {
     const currentState = useVoiceStore.getState().state;
     const socket = socketRef.current;
-
-    console.log('Voice hotkey pressed. Current state:', currentState);
 
     if (!socket?.connected) {
       setError('Not connected to backend');
@@ -252,6 +240,7 @@ export const useSocket = () => {
 
     if (currentState === 'idle') {
       activeCaptureModeRef.current = 'voice';
+      resetStreamingMessageRefs();
       setState('listening');
       setError(null);
 
@@ -259,27 +248,22 @@ export const useSocket = () => {
         const audioBlob = await startRecording('virtual');
         if (activeCaptureModeRef.current === 'voice') {
           activeCaptureModeRef.current = null;
-          sendAudioToBackend(audioBlob);
+          void sendAudioToBackend(audioBlob);
         }
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Recording failed';
-        console.error('Recording failed:', errorMessage);
         activeCaptureModeRef.current = null;
         setError(errorMessage);
         setState('idle');
       }
     } else if (currentState === 'listening') {
       stopRecording();
-    } else if (currentState === 'processing') {
-      console.log('Already processing, please wait...');
     }
-  }, [setState, setError, startRecording, stopRecording, sendAudioToBackend]);
+  }, [resetStreamingMessageRefs, sendAudioToBackend, setError, setState, startRecording, stopRecording]);
 
   const handleCodingHotkeyPress = useCallback(async () => {
     const currentState = useVoiceStore.getState().state;
     const socket = socketRef.current;
-
-    console.log('Coding hotkey pressed. Current state:', currentState);
 
     if (!socket?.connected) {
       setError('Not connected to backend');
@@ -293,44 +277,39 @@ export const useSocket = () => {
 
     if (currentState === 'idle') {
       activeCaptureModeRef.current = 'coding';
+      resetStreamingMessageRefs();
       setError(null);
 
       try {
         const screenshot = await window.electronAPI.captureCodingScreenshot();
-        codingScreenshotRef.current = screenshot;
-        setState('listening');
+        if (!screenshot) {
+          throw new Error('Screenshot capture failed');
+        }
 
-        const audioBlob = await startRecording('microphone');
+        setState('listening');
+        const audioBlob = await startRecording('virtual');
+
         if (activeCaptureModeRef.current === 'coding') {
           activeCaptureModeRef.current = null;
-          const savedScreenshot = codingScreenshotRef.current;
-          codingScreenshotRef.current = null;
-          sendCodingTaskToBackend(audioBlob, savedScreenshot || '');
+          void sendCodingTaskToBackend(audioBlob, screenshot);
         }
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Coding capture failed';
-        console.error('Coding capture failed:', errorMessage);
         activeCaptureModeRef.current = null;
-        codingScreenshotRef.current = null;
         setError(errorMessage);
         setState('idle');
       }
     } else if (currentState === 'listening') {
       stopRecording();
-    } else if (currentState === 'processing') {
-      console.log('Already processing, please wait...');
     }
-  }, [setState, setError, startRecording, stopRecording, sendCodingTaskToBackend]);
+  }, [resetStreamingMessageRefs, sendCodingTaskToBackend, setError, setState, startRecording, stopRecording]);
 
   const handleToggleSettings = useCallback(() => {
     const currentShowSettings = useVoiceStore.getState().showSettings;
-    console.log('Toggling settings:', !currentShowSettings);
     setShowSettings(!currentShowSettings);
   }, [setShowSettings]);
 
   useEffect(() => {
-    console.log('Connecting to', BACKEND_URL);
-
     const socket = io(BACKEND_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -341,13 +320,11 @@ export const useSocket = () => {
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      console.log('Connected:', socket.id);
       setError(null);
       socket.emit('get-config');
     });
 
     socket.on('current-config', (config: any) => {
-      console.log('Received config from backend:', JSON.stringify(config));
       updateConfig(config);
     });
 
@@ -357,35 +334,72 @@ export const useSocket = () => {
     });
 
     socket.on('state-change', ({ state }: { state: string }) => {
-      console.log('State:', state);
       setState(state as 'idle' | 'listening' | 'processing');
     });
 
+    socket.on('transcript-chunk', ({ text }: { text: string }) => {
+      if (!text) {
+        return;
+      }
+
+      if (!activeTranscriptMessageIdRef.current) {
+        activeTranscriptMessageIdRef.current = `user-${Date.now()}`;
+      }
+
+      appendToMessage(activeTranscriptMessageIdRef.current, text, 'user');
+    });
+
     socket.on('transcript', ({ text }: { text: string }) => {
-      console.log('Transcript:', text);
-      addMessage({
-        id: Date.now().toString(),
+      const id = activeTranscriptMessageIdRef.current || `user-${Date.now()}`;
+      activeTranscriptMessageIdRef.current = id;
+      upsertMessage({
+        id,
         text,
         type: 'user',
         timestamp: Date.now(),
       });
     });
 
-    socket.on('ai-response', ({ text, language }: { text: string; language?: string }) => {
-      console.log('AI Response:', text);
-      console.log('Response language:', language);
-      addMessage({
-        id: Date.now().toString(),
+    socket.on('ai-response-start', () => {
+      activeAssistantMessageIdRef.current = activeAssistantMessageIdRef.current || `assistant-${Date.now()}`;
+    });
+
+    socket.on('ai-response-chunk', ({ text }: { text: string }) => {
+      if (!text) {
+        return;
+      }
+
+      if (!activeAssistantMessageIdRef.current) {
+        activeAssistantMessageIdRef.current = `assistant-${Date.now()}`;
+      }
+
+      appendToMessage(activeAssistantMessageIdRef.current, text, 'assistant');
+    });
+
+    socket.on('ai-response-done', ({ text }: { text: string }) => {
+      const id = activeAssistantMessageIdRef.current || `assistant-${Date.now()}`;
+      activeAssistantMessageIdRef.current = id;
+      upsertMessage({
+        id,
         text,
         type: 'assistant',
         timestamp: Date.now(),
       });
     });
 
+    socket.on('ai-response', ({ text }: { text: string }) => {
+      if (!activeAssistantMessageIdRef.current) {
+        addMessage({
+          id: Date.now().toString(),
+          text,
+          type: 'assistant',
+          timestamp: Date.now(),
+        });
+      }
+    });
+
     socket.on('error', ({ message }: { message: string }) => {
-      console.error('Error:', message);
       activeCaptureModeRef.current = null;
-      codingScreenshotRef.current = null;
       setError(message);
       setState('idle');
     });
@@ -395,9 +409,7 @@ export const useSocket = () => {
     }
 
     if (isElectron && window.electronAPI && !electronListenersRegistered) {
-      console.log('Setting up Electron hotkeys');
       electronListenersRegistered = true;
-
       window.electronAPI.onHotkeyPressed(handleHotkeyPress);
       window.electronAPI.onCodingHotkeyPressed(handleCodingHotkeyPress);
       window.electronAPI.onToggleSettings(handleToggleSettings);
@@ -408,14 +420,16 @@ export const useSocket = () => {
       stopRecording();
     };
   }, [
-    setState,
     addMessage,
-    setError,
-    updateConfig,
-    handleHotkeyPress,
+    appendToMessage,
     handleCodingHotkeyPress,
+    handleHotkeyPress,
     handleToggleSettings,
+    setError,
+    setState,
     stopRecording,
+    updateConfig,
+    upsertMessage,
   ]);
 
   return socketRef.current;
